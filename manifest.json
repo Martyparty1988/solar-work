@@ -1,0 +1,17 @@
+{
+  "name": "Solar Work Count Lithuania by Marty Party",
+  "short_name": "Solar Work",
+  "description": "Solar panel installation work tracking application",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e293b",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
