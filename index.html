@@ -81,6 +81,16 @@
                 </div>
             </div>
 
+            <!-- NOVÁ KARTA: Ruční Zadání -->
+            <div class="card mb-16">
+                <h2 class="mb-16" style="font-size: 18px;">Ruční Zadání Záznamu</h2>
+                <div class="flex gap-8">
+                    <button onclick="openManualHourModal()" class="btn btn-secondary w-full">Zadat Hodiny</button>
+                    <button onclick="openManualTaskModal()" class="btn btn-secondary w-full">Zadat Stoly</button>
+                </div>
+            </div>
+            <!-- KONEC NOVÉ KARTY -->
+
             <h2 style="font-size: 18px; margin-bottom: 16px;">Všechny Záznamy</h2>
             <div class="card mb-16">
                 <h3 class="mb-16" style="font-size: 16px;">Filtry záznamů</h3>
@@ -313,6 +323,73 @@
         </div>
     </div>
 
+    <!-- NOVÝ MODÁL: Manual Hour Entry -->
+    <div id="manualHourModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Zadat Ruční Hodiny</h3>
+                <button class="modal-close" onclick="closeModal('manualHourModal')">&times;</button>
+            </div>
+            <form id="manualHourForm" onsubmit="saveManualHours(event)">
+                <div class="form-group">
+                    <label class="form-label">Pracovník</label>
+                    <select id="manualHourWorker" class="form-control" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Datum</label>
+                    <input type="date" id="manualHourDate" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Počet Hodin</label>
+                    <input type="number" id="manualHourTotalHours" class="form-control" step="0.1" min="0" required>
+                </div>
+                <div class="flex gap-8">
+                    <button type="button" onclick="closeModal('manualHourModal')" class="btn btn-secondary w-full">Zrušit</button>
+                    <button type="submit" class="btn btn-primary w-full">Uložit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- KONEC NOVÉHO MODÁLU -->
+
+    <!-- NOVÝ MODÁL: Manual Task Entry -->
+    <div id="manualTaskModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Zadat Stoly Ručně</h3>
+                <button class="modal-close" onclick="closeModal('manualTaskModal')">&times;</button>
+            </div>
+            <form id="manualTaskForm" onsubmit="saveManualTask(event)">
+                <div class="form-group">
+                    <label class="form-label">Pracovník</label>
+                    <select id="manualTaskWorker" class="form-control" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Projekt</label>
+                    <select id="manualTaskProject" class="form-control" required></select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Datum</label>
+                    <input type="date" id="manualTaskDate" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Čísla Stolů (oddělte čárkou, např: 1, 2, 5A)</label>
+                    <input type="text" id="manualTaskTableNumbers" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Odměna za 1 stůl (€)</label>
+                    <input type="number" id="manualTaskRewardPerTable" class="form-control" step="0.01" min="0" required>
+                </div>
+                <div class="flex gap-8">
+                    <button type="button" onclick="closeModal('manualTaskModal')" class="btn btn-secondary w-full">Zrušit</button>
+                    <button type="submit" class="btn btn-primary w-full">Uložit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- KONEC NOVÉHO MODÁLU -->
+
+
     <!-- Modal: Daily Report -->
     <div id="reportModal" class="modal">
         <div class="modal-content">
@@ -328,3 +405,4 @@
     <script src="app.js"></script>
 </body>
 </html>
+
