@@ -125,22 +125,194 @@ body::-webkit-scrollbar-thumb {
     }
 }
 
-/* --- Canvas Container --- */
-.canvas-container {
-    position: relative;
-    width: 100%;
-    height: calc(100vh - 300px); /* Více prostoru pro ovládací prvky */
-    overflow: hidden;
-    border-radius: var(--border-radius-lg);
-    touch-action: none;
-    background: var(--color-bg-light);
+/* ======================================= */
+/* --- Nové Styly pro Kartu Plánu      --- */
+/* ======================================= */
+
+.plan-card {
+    border-radius: 18px; 
+    /* Používám --color-bg-card pro konzistenci, ale tmavší než v návrhu */
+    background: var(--color-bg-card); 
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    /* Jemný glow z návrhu */
+    box-shadow: 0 4px 24px rgba(52,144,220,0.17), 0 1px 0 rgba(255,255,255,0.1) inset;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 24px; /* Upraveno z 32px pro lepší mobilní zobrazení */
+    margin: 0 auto; /* Centrování karty */
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+@media (min-width: 768px) {
+    .plan-card {
+        padding: 32px;
+    }
+}
+
+.plan-header {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+@media (min-width: 768px) {
+    .plan-header {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+    }
+}
+
+.plan-title {
+    font-size: 1.8rem; /* Upraveno z 2rem */
+    font-weight: 700;
+    /* Používám gradient z headeru pro konzistenci */
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px; /* Lehce upraveno */
+    line-height: 1.2;
+}
+
+.plan-actions {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+/* Aplikuji styl z návrhu na tlačítka v .plan-actions */
+.plan-actions button {
+    margin-left: 0.6em;
+    background: linear-gradient(90deg, #fcd34d, #38bdf8);
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 2px 8px #fcd34d44;
+    padding: 0.6em 1.2em; /* Zmenšeno pro mobil */
+    font-size: 14px; /* Zmenšeno pro mobil */
+    font-weight: 600;
+    color: #1a202c;
+    cursor: pointer;
+    transition: transform .13s;
+}
+
+@media (min-width: 768px) {
+    .plan-actions button {
+        font-size: 1rem;
+        padding: 0.6em 1.6em;
+    }
+}
+
+.plan-actions button:hover { 
+    transform: scale(1.06);
+    box-shadow: 0 4px 12px #fcd34d66;
+}
+
+/* -- Ovládání PDF -- */
+.pdf-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.2);
+    padding: 12px;
+    border-radius: var(--border-radius-md);
+}
+.page-indicator {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    min-width: 80px;
+    text-align: center;
+}
+.pdf-control-btn {
+    padding: 8px 12px;
+    min-height: 36px;
+    font-size: 16px;
+    font-weight: 600;
+}
+.pdf-control-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* -- PDF Preview -- */
+.pdf-preview {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--color-bg-light); /* Tmavší pozadí pro plátno */
+    min-height: 240px; /* Z návrhu */
+    height: calc(100vh - 450px); /* Výška se přizpůsobí, ale má min */
+    max-height: 70vh;
+    box-shadow: 0 2px 12px #38bdf855; /* Z návrhu */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#canvasWrapper {
+    height: 100%; /* Ujistí se, že wrapper vyplní .pdf-preview */
+    overflow: hidden; /* Skryje plátno mimo */
 }
 
 #pdfCanvas {
     display: block;
     cursor: crosshair;
+    background: #fff; /* Bílé pozadí pro samotné PDF */
 }
+
+/* Přesunutí .empty-state z canvasWrapper do .pdf-preview */
+.pdf-preview .empty-state {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* -- Badges Pracovníků -- */
+.worker-badges-container {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 24px;
+}
+
+.worker-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px; /* Zvětšeno z 0.4em */
+}
+
+.worker-badge {
+    /* Používám barvu pracovníka, nikoli gradient */
+    color: #fff;
+    border-radius: 14px;
+    padding: 0.4em 1.1em;
+    font-weight: 500;
+    font-size: 0.9rem; /* Zmenšeno z 1em */
+    box-shadow: 0 1px 6px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+}
+/* Tečka bude uvnitř badge, ale bude mít barvu z JS */
+.worker-badge .worker-color-dot {
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    border: none;
+}
+
+
+/* ======================================= */
+/* --- Ostatní Styly (beze změny)      --- */
+/* ======================================= */
+
 
 /* --- Tlačítka --- */
 .btn {
@@ -576,7 +748,7 @@ select.form-control {
     opacity: 0.8;
 }
 
-/* --- Nové styly pro barvy pracovníků --- */
+/* --- Styly pro barvy pracovníků --- */
 .worker-color-dot {
     display: inline-block;
     width: 12px;
@@ -591,19 +763,6 @@ select.form-control {
     display: flex;
     align-items: center;
     margin-bottom: 4px;
-    font-weight: 500;
-}
-
-.project-legend {
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding-top: 16px;
-}
-
-.legend-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 14px;
     font-weight: 500;
 }
 
