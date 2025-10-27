@@ -156,6 +156,9 @@ async function initApp() {
     document.getElementById('restoreButton').addEventListener('click', triggerRestore);
     document.getElementById('restoreFileInput').addEventListener('change', restoreData);
     
+    // NOVÝ: Listener pro CSV Export
+    document.getElementById('exportCSV').addEventListener('click', exportToCSV);
+
     renderProjectsDropdown();
     renderWorkersList();
     renderProjectsList();
@@ -204,7 +207,7 @@ function loadState() {
         state.projects = parsedState.projects || [];
         state.workers = parsedState.workers || [];
         
-        // --- Migrace dat ---
+        // --- Migrace dat (z minulé lekce) ---
         // Zkontrolovat, jestli workEntries mají starou strukturu
         if (parsedState.workEntries && parsedState.workEntries.length > 0 && parsedState.workEntries[0].workerId) {
             console.log('Provádím migraci dat záznamů...');
@@ -220,12 +223,12 @@ function loadState() {
                         x: e.x,
                         y: e.y,
                         timestamp: e.timestamp,
+                        pageNum: e.pageNum || 1, // Přidat pageNum
                         // Vytvořit nové pole workers
                         workers: [{ 
                             workerId: e.workerId, 
                             workerCode: e.workerCode 
                         }]
-                        // staré klíče workerId, workerCode, reward jsou automaticky zahozeny
                     };
                 }
                 return e; // Ponechat 'hourly' záznamy beze změny
@@ -274,7 +277,6 @@ function navigateTo(pageName) {
     }
     else if (pageName === 'statistics') updateStatistics();
     else if (pageName === 'plan') {
-        // Logika se přesunula do loadProjectPlan
         const projectId = document.getElementById('projectSelect').value;
         renderWorkerBadges(projectId);
     }
@@ -300,7 +302,6 @@ function setupEventListeners() {
     document.getElementById('planStatsButton').addEventListener('click', () => {
         const projectId = document.getElementById('projectSelect').value;
         if (!projectId) return;
-        // Přejít na statistiky a nastavit filtr na tento projekt
         document.getElementById('statsProjectFilter').value = projectId;
         navigateTo('statistics');
     });
@@ -324,11 +325,30 @@ function setupEventListeners() {
     document.getElementById('statsProjectFilter').addEventListener('change', updateStatistics);
 }
 
+// NOVÉ: Haptická odezva
+function vibrate(duration = 50) {
+    if ('vibrate' in navigator) {
+        try {
+            navigator.vibrate(duration);
+        } catch (e) {
+            console.warn('Vibration failed', e);
+        }
+    }
+}
+
 // Toasts
 function showToast(message, type = 'info') {
     const toast = document.getElementById('toast');
     toast.textContent = message;
     toast.className = `toast toast-${type} show`;
+    
+    // Přidat vibraci pro úspěch a chybu
+    if (type === 'success') {
+        vibrate(50);
+    } else if (type === 'error') {
+        vibrate([100, 30, 100]); // Dvě krátké vibrace pro chybu
+    }
+    
     setTimeout(() => { toast.classList.remove('show'); }, 3000);
 }
 
@@ -534,11 +554,9 @@ function deleteWorker(workerId) {
 function renderWorkersList() {
     const container = document.getElementById('workersList');
     const timerSelect = document.getElementById('timerWorker');
-    // const taskSelect = document.getElementById('taskWorker'); // Nahrazeno checklistem
     const statsSelect = document.getElementById('statsWorkerFilter');
     const recordsSelect = document.getElementById('recordsWorkerFilter');
     const manualHourSelect = document.getElementById('manualHourWorker');
-    // const manualTaskSelect = document.getElementById('manualTaskWorker'); // Nahrazeno checklistem
     
     if (state.workers.length === 0) {
         container.innerHTML = '<div class="empty-state" style="padding: 20px;">Žádní pracovníci</div>';
@@ -564,11 +582,9 @@ function renderWorkersList() {
     
     const optionsHtml = '<option value="">-- Vyberte pracovníka --</option>' + workerOptions;
     timerSelect.innerHTML = optionsHtml;
-    // taskSelect.innerHTML = optionsHtml; // Pryč
     statsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions;
     if (recordsSelect) { recordsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions; }
     if (manualHourSelect) { manualHourSelect.innerHTML = optionsHtml; }
-    // if (manualTaskSelect) { manualTaskSelect.innerHTML = optionsHtml; } // Pryč
 }
 
 // =============================================
@@ -870,6 +886,8 @@ function handleTouchEnd(e) {
     const touchDuration = Date.now() - canvasState.touchStartTime;
     
     if (touchDuration < 300 && !canvasState.touchMoved && e.changedTouches.length === 1) {
+        vibrate(20); // Krátká vibrace při ťuknutí
+        
         // Byl to "ťuk" (tap)
         const rect = e.target.getBoundingClientRect();
         const x = e.changedTouches[0].clientX - rect.left;
@@ -1049,6 +1067,7 @@ function startShift() {
         return;
     }
     
+    vibrate(100); // Delší vibrace pro start
     timerState.isRunning = true;
     timerState.startTime = Date.now();
     timerState.workerId = workerId;
@@ -1065,6 +1084,7 @@ function startShift() {
 function stopShift() {
     if (!timerState.isRunning) return;
     
+    vibrate(100); // Delší vibrace pro stop
     const endTime = Date.now();
     const totalMs = endTime - timerState.startTime;
     const totalHours = totalMs / (1000 * 60 * 60);
@@ -1605,12 +1625,26 @@ function generateDailyReport() {
             report += `
 Hotové Stoly:
 `;
+            // Seskupit stoly pro přehlednost
+            const tasksByProject = {};
             data.tasks.forEach(task => {
                 const project = state.projects.find(p => p.id === task.projectId);
-                report += `  • ${task.tableNumber} - €${task.reward.toFixed(2)} (${project ? project.jmenoProjektu : 'N/A'})
-`;
-                taskTotal += task.reward;
+                const projectName = project ? project.jmenoProjektu : 'N/A';
+                if (!tasksByProject[projectName]) {
+                    tasksByProject[projectName] = { tables: [], reward: 0 };
+                }
+                tasksByProject[projectName].tables.push(task.tableNumber);
+                tasksByProject[projectName].reward += task.reward;
             });
+
+            Object.entries(tasksByProject).forEach(([projectName, projectData]) => {
+                report += `  • Projekt: ${projectName}
+    Stoly: ${projectData.tables.join(', ')}
+    Odměna: €${projectData.reward.toFixed(2)}
+`;
+                taskTotal += projectData.reward;
+            });
+            
             report += `  Celkem ze stolů: €${taskTotal.toFixed(2)}
 `;
         }
@@ -1795,6 +1829,87 @@ async function restoreData(event) {
     
     reader.readAsText(file);
 }
+
+// =============================================
+// --- NOVÉ: CSV Export ---
+// =============================================
+
+function escapeCSV(str) {
+    if (str === null || str === undefined) {
+        return '""';
+    }
+    str = String(str);
+    let result = str.replace(/"/g, '""');
+    if (result.search(/("|,|\n)/g) >= 0) {
+        result = `"${result}"`;
+    }
+    return result;
+}
+
+function exportToCSV() {
+    if (state.workEntries.length === 0) {
+        showToast('Není co exportovat', 'info');
+        return;
+    }
+
+    showLoader();
+
+    // Hlavičky
+    const headers = [
+        "ID_Zaznamu", "Typ", "Datum", 
+        "Pracovnik_ID", "Pracovnik_Jmeno", "Pracovnik_Kod", 
+        "Projekt_ID", "Projekt_Jmeno", 
+        "Cislo_Stolu", "Pocet_Hodin", "Vydelano_EUR"
+    ];
+    let csvContent = headers.join(",") + "\r\n";
+
+    // Projít všechny záznamy
+    state.workEntries.forEach(entry => {
+        if (entry.type === 'hourly') {
+            const worker = state.workers.find(w => w.id === entry.workerId) || { name: 'Neznamy', code: 'N/A' };
+            const date = new Date(entry.startTime).toISOString();
+            const row = [
+                entry.id, entry.type, date,
+                entry.workerId, worker.name, worker.code,
+                "", "", // Projekt
+                "", entry.totalHours.toFixed(2), entry.totalEarned.toFixed(2) // Stůl
+            ];
+            csvContent += row.map(escapeCSV).join(",") + "\r\n";
+
+        } else if (entry.type === 'task') {
+            const project = state.projects.find(p => p.id === entry.projectId) || { jmenoProjektu: 'Neznamy' };
+            const date = new Date(entry.timestamp).toISOString();
+            
+            // Vytvořit řádek pro KAŽDÉHO pracovníka na úkolu
+            entry.workers.forEach(w => {
+                const worker = state.workers.find(f => f.id === w.workerId) || { name: 'Neznamy', code: 'N/A' };
+                const row = [
+                    entry.id, entry.type, date,
+                    w.workerId, worker.name, w.workerCode,
+                    entry.projectId, project.jmenoProjektu,
+                    entry.tableNumber, "", entry.rewardPerWorker.toFixed(2) // Odměna na jednoho
+                ];
+                csvContent += row.map(escapeCSV).join(",") + "\r\n";
+            });
+        }
+    });
+
+    // Vytvoření a stažení souboru
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const date = new Date().toISOString().split('T')[0];
+    a.download = `solar_work_export_${date}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    hideLoader();
+    showToast('CSV export úspěšně vygenerován', 'success');
+}
+
 
 // Boot
 window.addEventListener('DOMContentLoaded', initApp);
