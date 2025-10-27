@@ -28,6 +28,8 @@ let canvasState = {
     pdfRendered: false,
     currentPDF: null,
     currentPage: null,
+    currentPageNum: 1, // Nový stav pro stránkování
+    totalPages: 0,     // Nový stav pro stránkování
     baseScale: 1.0,
     touchStartDistance: 0,
     touchStartZoom: 1.0,
@@ -180,6 +182,9 @@ async function initApp() {
     if (state.projects.length === 0) {
         navigateTo('settings');
     }
+    
+    // Inicializovat stav Plánu (skrýt prvky)
+    updatePlanUI(null);
 
     // Register Service Worker
     if ('serviceWorker' in navigator) {
@@ -226,6 +231,8 @@ function navigateTo(pageName) {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.toggle('active', item.dataset.page === pageName);
     });
+    
+    // Aktualizovat obsah při přepnutí stránky
     if (pageName === 'records') {
         renderRecordsList();
         renderWorkersList(); // Potřeba pro modály
@@ -233,20 +240,43 @@ function navigateTo(pageName) {
     }
     else if (pageName === 'statistics') updateStatistics();
     else if (pageName === 'plan') {
-        // Vykreslit legendu při přechodu na Plán
+        // Logika se přesunula do loadProjectPlan
         const projectId = document.getElementById('projectSelect').value;
-        renderProjectLegend(projectId);
+        renderWorkerBadges(projectId);
     }
 }
 
 // Listeners
 function setupEventListeners() {
+    // Stránka Plán
     document.getElementById('projectSelect').addEventListener('change', loadProjectPlan);
     const canvas = document.getElementById('pdfCanvas');
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    
+    // Nové ovládací prvky PDF
     document.getElementById('resetZoom').addEventListener('click', resetZoom);
+    document.getElementById('zoomIn').addEventListener('click', () => changeZoom(0.2));
+    document.getElementById('zoomOut').addEventListener('click', () => changeZoom(-0.2));
+    document.getElementById('prevPage').addEventListener('click', () => changePage(-1));
+    document.getElementById('nextPage').addEventListener('click', () => changePage(1));
+    
+    // Akce plánu
+    document.getElementById('planStatsButton').addEventListener('click', () => {
+        const projectId = document.getElementById('projectSelect').value;
+        if (!projectId) return;
+        // Přejít na statistiky a nastavit filtr na tento projekt
+        document.getElementById('statsProjectFilter').value = projectId;
+        navigateTo('statistics');
+    });
+    document.getElementById('planEditButton').addEventListener('click', () => {
+        const projectId = document.getElementById('projectSelect').value;
+        if (!projectId) return;
+        openProjectModal(projectId);
+    });
+
+    // Stránka Záznamy
     document.getElementById('startShift').addEventListener('click', startShift);
     document.getElementById('stopShift').addEventListener('click', stopShift);
     
@@ -255,6 +285,7 @@ function setupEventListeners() {
     document.getElementById('recordsProjectFilter').addEventListener('change', renderRecordsList);
     document.getElementById('recordsDateFilter').addEventListener('change', renderRecordsList);
 
+    // Stránka Statistiky
     document.getElementById('statsWorkerFilter').addEventListener('change', updateStatistics);
     document.getElementById('statsProjectFilter').addEventListener('change', updateStatistics);
 }
@@ -318,6 +349,10 @@ async function saveProject(event) {
             saveState();
             renderProjectsList();
             renderProjectsDropdown();
+            // Aktualizovat UI plánu, pokud byl upravován aktivní projekt
+            if (document.getElementById('projectSelect').value === projectIdToSave) {
+                updatePlanUI(projectIdToSave);
+            }
             closeModal('projectModal');
             hideLoader();
             showToast('Projekt a PDF uloženy', 'success');
@@ -333,6 +368,10 @@ async function saveProject(event) {
         saveState();
         renderProjectsList();
         renderProjectsDropdown();
+        // Aktualizovat UI plánu, pokud byl upravován aktivní projekt
+        if (document.getElementById('projectSelect').value === projectId) {
+            updatePlanUI(projectId);
+        }
         closeModal('projectModal');
         showToast('Projekt aktualizován', 'success');
     } else {
@@ -343,6 +382,9 @@ async function saveProject(event) {
 // delete project
 async function deleteProject(projectId) {
     if (confirm('Opravdu chcete smazat tento projekt? Smažou se i všechny související záznamy a PDF.')) {
+        // Zjistit, zda je mazaný projekt aktivní
+        const isDeletingActive = (document.getElementById('projectSelect').value === projectId);
+
         state.projects = state.projects.filter(p => p.id !== projectId);
         state.workEntries = state.workEntries.filter(e => e.projectId !== projectId);
         
@@ -351,7 +393,13 @@ async function deleteProject(projectId) {
         saveState();
         renderProjectsList();
         renderProjectsDropdown();
-        renderProjectLegend(null); // Vyčistit legendu
+        
+        // Pokud byl smazán aktivní projekt, resetovat UI plánu
+        if (isDeletingActive) {
+            document.getElementById('projectSelect').value = "";
+            updatePlanUI(null);
+        }
+        
         showToast('Projekt smazán', 'success');
     }
 }
@@ -381,14 +429,14 @@ function renderProjectsDropdown() {
     const select = document.getElementById('projectSelect');
     const statsSelect = document.getElementById('statsProjectFilter');
     const recordsSelect = document.getElementById('recordsProjectFilter');
-    const manualTaskProjectSelect = document.getElementById('manualTaskProject'); // NOVÝ
+    const manualTaskProjectSelect = document.getElementById('manualTaskProject');
     
     const options = state.projects.map(p => `<option value="${p.id}">${p.jmenoProjektu}</option>`).join('');
     
     select.innerHTML = '<option value="">-- Vyberte projekt --</option>' + options;
     statsSelect.innerHTML = '<option value="">Všechny projekty</option>' + options;
     if (recordsSelect) { recordsSelect.innerHTML = '<option value="">Všechny projekty</option>' + options; }
-    if (manualTaskProjectSelect) { manualTaskProjectSelect.innerHTML = '<option value="">-- Vyberte projekt --</option>' + options; } // NOVÝ
+    if (manualTaskProjectSelect) { manualTaskProjectSelect.innerHTML = '<option value="">-- Vyberte projekt --</option>' + options; }
 }
 
 // WORKERS
@@ -455,8 +503,8 @@ function renderWorkersList() {
     const taskSelect = document.getElementById('taskWorker');
     const statsSelect = document.getElementById('statsWorkerFilter');
     const recordsSelect = document.getElementById('recordsWorkerFilter');
-    const manualHourSelect = document.getElementById('manualHourWorker'); // NOVÝ
-    const manualTaskSelect = document.getElementById('manualTaskWorker'); // NOVÝ
+    const manualHourSelect = document.getElementById('manualHourWorker');
+    const manualTaskSelect = document.getElementById('manualTaskWorker');
     
     if (state.workers.length === 0) {
         container.innerHTML = '<div class="empty-state" style="padding: 20px;">Žádní pracovníci</div>';
@@ -485,39 +533,33 @@ function renderWorkersList() {
     taskSelect.innerHTML = optionsHtml;
     statsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions;
     if (recordsSelect) { recordsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions; }
-    if (manualHourSelect) { manualHourSelect.innerHTML = optionsHtml; } // NOVÝ
-    if (manualTaskSelect) { manualTaskSelect.innerHTML = optionsHtml; } // NOVÝ
+    if (manualHourSelect) { manualHourSelect.innerHTML = optionsHtml; }
+    if (manualTaskSelect) { manualTaskSelect.innerHTML = optionsHtml; }
 }
 
-// PLAN loading
+// =============================================
+// --- LOGIKA STRÁNKY PLÁN (Přepracováno)    ---
+// =============================================
+
+// Hlavní funkce pro načtení projektu
 async function loadProjectPlan() {
     const projectId = document.getElementById('projectSelect').value;
-    renderProjectLegend(projectId); // Vykreslit legendu při každé změně
+    updatePlanUI(projectId); // Aktualizuje název, tlačítka atd.
     
     if (!projectId) {
-        document.getElementById('canvasWrapper').style.display = 'none';
-        document.getElementById('noPlanMessage').style.display = 'block';
-        document.getElementById('noPlanMessage').innerHTML = `
-            <div class="empty-state-icon">📋</div>
-            <div>Nejprve vyberte projekt</div>
-            <button onclick="navigateTo('settings')" class="btn btn-primary mt-16">Přidat Projekt</button>
-        `;
-        return;
+        return; // Zobrazí se "empty state"
     }
     
     showLoader();
     try {
         const pdfBlob = await loadPDF(projectId);
         const arrayBuffer = await pdfBlob.arrayBuffer();
-
-        document.getElementById('noPlanMessage').style.display = 'none';
-        document.getElementById('canvasWrapper').style.display = 'block';
-        renderPDF(arrayBuffer); 
+        renderPDF(arrayBuffer); // Načte a vykreslí PDF
 
     } catch (error) {
         console.warn('PDF not found in IndexedDB:', error);
         document.getElementById('canvasWrapper').style.display = 'none';
-        document.getElementById('noPlanMessage').style.display = 'block';
+        document.getElementById('noPlanMessage').style.display = 'flex'; // Zobrazit zprávu o chybějícím PDF
         document.getElementById('noPlanMessage').innerHTML = `
             <div class="empty-state-icon">🔄</div>
             <div>Plán PDF není v databázi.</div>
@@ -528,26 +570,45 @@ async function loadProjectPlan() {
     }
 }
 
-// Render PDF
+// Aktualizuje UI karty plánu (název, tlačítka, legenda)
+function updatePlanUI(projectId) {
+    const project = state.projects.find(p => p.id === projectId);
+    
+    if (project) {
+        // Projekt je vybrán
+        document.getElementById('planTitle').textContent = project.jmenoProjektu;
+        document.getElementById('planActions').style.display = 'flex';
+        document.getElementById('pdfControls').style.display = 'flex';
+        document.getElementById('workerBadgesContainer').style.display = 'block';
+        document.getElementById('canvasWrapper').style.display = 'block'; // Zobrazit wrapper plátna
+        document.getElementById('noPlanMessage').style.display = 'none'; // Skrýt zprávu
+        
+        renderWorkerBadges(projectId); // Vykreslit legendu
+    } else {
+        // Není vybrán projekt
+        document.getElementById('planTitle').textContent = 'Vyberte projekt';
+        document.getElementById('planActions').style.display = 'none';
+        document.getElementById('pdfControls').style.display = 'none';
+        document.getElementById('workerBadgesContainer').style.display = 'none';
+        document.getElementById('canvasWrapper').style.display = 'none'; // Skrýt wrapper plátna
+        document.getElementById('noPlanMessage').style.display = 'flex'; // Zobrazit výchozí zprávu
+        document.getElementById('noPlanMessage').innerHTML = `
+            <div class="empty-state-icon">📋</div>
+            <div>Pro zobrazení plánu vyberte projekt výše.</div>
+            <button onclick="navigateTo('settings')" class="btn btn-primary mt-16">Přidat Projekt</button>
+        `;
+    }
+}
+
+// Načte PDF dokument
 function renderPDF(pdfData) {
     const loadingTask = pdfjsLib.getDocument({ data: pdfData });
     loadingTask.promise.then(pdf => {
         canvasState.currentPDF = pdf;
-        return pdf.getPage(1);
-    }).then(page => {
-        canvasState.currentPage = page;
-        const canvas = document.getElementById('pdfCanvas');
-        const container = document.getElementById('canvasContainer');
-        const containerWidth = container.clientWidth;
+        canvasState.totalPages = pdf.numPages; // Uložit celkový počet stran
+        canvasState.currentPageNum = 1;        // Resetovat na první stranu
         
-        const viewport = page.getViewport({ scale: 1.0 });
-        const scale = containerWidth / viewport.width;
-        canvasState.baseScale = scale;
-        canvasState.currentZoom = 1.0;
-        canvasState.panOffsetX = 0;
-        canvasState.panOffsetY = 0;
-        
-        renderCanvasWithPins();
+        renderPage(canvasState.currentPageNum); // Vykreslit první stranu
         hideLoader(); 
         canvasState.pdfRendered = true;
     }).catch(error => {
@@ -557,6 +618,34 @@ function renderPDF(pdfData) {
     });
 }
 
+// Vykreslí specifickou stránku
+function renderPage(pageNum) {
+    if (!canvasState.currentPDF) return;
+    
+    canvasState.currentPageNum = pageNum;
+    updatePdfControls(); // Aktualizovat UI (indikátor strany, tlačítka)
+    
+    canvasState.currentPDF.getPage(pageNum).then(page => {
+        canvasState.currentPage = page;
+        
+        // Resetovat zoom a posun při změně stránky
+        canvasState.currentZoom = 1.0;
+        canvasState.panOffsetX = 0;
+        canvasState.panOffsetY = 0;
+        
+        const canvas = document.getElementById('pdfCanvas');
+        const container = document.getElementById('canvasWrapper'); // Používáme wrapper pro měření
+        const containerWidth = container.clientWidth;
+        
+        const viewport = page.getViewport({ scale: 1.0 });
+        const scale = containerWidth / viewport.width;
+        canvasState.baseScale = scale;
+        
+        renderCanvasWithPins(); // Finální vykreslení
+    });
+}
+
+// Vykreslí plátno se zoomem, posunem a piny
 function renderCanvasWithPins() {
     if (!canvasState.currentPage) return;
     
@@ -576,15 +665,17 @@ function renderCanvasWithPins() {
     const renderContext = { canvasContext: context, viewport: viewport };
     canvasState.currentPage.render(renderContext).promise.then(() => {
         context.restore();
-        drawPins(context);
+        drawPins(context); // Vykreslit piny až po vykreslení PDF
     });
 }
 
+// Vykreslí piny na plátno
 function drawPins(context) {
     const projectId = document.getElementById('projectSelect').value;
     if (!projectId) return;
     
-    // Vykreslit pouze piny, které mají X/Y (tj. byly přidány z plánu)
+    // Vykreslit pouze piny pro aktuální projekt A STRÁNKU (zatím nepodporováno)
+    // TODO: Přidat 'pageNum' do 'task' záznamu
     const entries = state.workEntries.filter(e => e.type === 'task' && e.projectId === projectId && e.x !== null && e.y !== null);
     const totalScale = canvasState.baseScale * canvasState.currentZoom;
     
@@ -597,8 +688,7 @@ function drawPins(context) {
         
         context.beginPath();
         context.arc(x, y, 12, 0, 2 * Math.PI);
-        // Použití barvy pracovníka s 80% průhledností (cc)
-        context.fillStyle = color + 'cc'; 
+        context.fillStyle = color + 'cc'; // Barva pracovníka s 80% průhledností
         context.fill();
         context.strokeStyle = '#fff'; // Bílý okraj
         context.lineWidth = 2;
@@ -617,9 +707,9 @@ function drawPins(context) {
     });
 }
 
-// Vykreslení legendy
-function renderProjectLegend(projectId) {
-    const container = document.getElementById('projectLegend');
+// Vykreslení legendy (badges)
+function renderWorkerBadges(projectId) {
+    const container = document.getElementById('workerBadges');
     if (!projectId) {
         container.innerHTML = '';
         return;
@@ -630,21 +720,19 @@ function renderProjectLegend(projectId) {
     const workers = workerIds.map(id => state.workers.find(w => w.id === id)).filter(Boolean); // .filter(Boolean) odstraní případné 'undefined'
     
     if (workers.length === 0) {
-        container.innerHTML = '<div class="legend-item" style="color: var(--color-text-secondary);">Žádné záznamy pro tento projekt.</div>';
+        container.innerHTML = '<span style="color: var(--color-text-secondary); font-size: 14px;">Žádní pracovníci na tomto projektu.</span>';
         return;
     }
     
-    container.innerHTML = `
-        <h4 style="font-size: 14px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 12px;">Legenda:</h4>
-        ${workers.map(w => `
-            <div class="legend-item">
-                <span class="worker-color-dot" style="background-color: ${w.color || '#94a3b8'}"></span>
-                ${w.name} (${w.code || 'N/A'})
-            </div>
-        `).join('')}
-    `;
+    container.innerHTML = workers.map(w => `
+        <div class="worker-badge" style="background: ${w.color || '#94a3b8'}33; border: 1px solid ${w.color || '#94a3b8'}88;">
+            <span class="worker-color-dot" style="background-color: ${w.color || '#94a3b8'}"></span>
+            ${w.name} (${w.code || 'N/A'})
+        </div>
+    `).join('');
 }
 
+// --- Ovládání PDF (Zoom, Stránky) ---
 function resetZoom() {
     canvasState.currentZoom = 1.0;
     canvasState.panOffsetX = 0;
@@ -652,7 +740,33 @@ function resetZoom() {
     renderCanvasWithPins();
 }
 
-// Touch interactions
+function changeZoom(delta) {
+    const newZoom = canvasState.currentZoom + delta;
+    canvasState.currentZoom = Math.max(0.5, Math.min(3.0, newZoom)); // Omezit zoom
+    renderCanvasWithPins();
+}
+
+function changePage(delta) {
+    if (!canvasState.currentPDF) return;
+    const newPageNum = canvasState.currentPageNum + delta;
+    
+    if (newPageNum > 0 && newPageNum <= canvasState.totalPages) {
+        renderPage(newPageNum); // Vykreslit novou stránku
+    }
+}
+
+function updatePdfControls() {
+    const indicator = document.getElementById('pageIndicator');
+    const prevBtn = document.getElementById('prevPage');
+    const nextBtn = document.getElementById('nextPage');
+    
+    indicator.textContent = `Strana ${canvasState.currentPageNum} / ${canvasState.totalPages}`;
+    prevBtn.disabled = (canvasState.currentPageNum <= 1);
+    nextBtn.disabled = (canvasState.currentPageNum >= canvasState.totalPages);
+}
+
+
+// --- Touch Interakce (beze změny) ---
 function handleTouchStart(e) {
     e.preventDefault();
     canvasState.touchStartTime = Date.now();
@@ -743,6 +857,10 @@ function handleTouchEnd(e) {
     canvasState.isDragging = false;
 }
 
+// =============================================
+// --- OSTATNÍ STRÁNKY (Záznamy, Statistiky...) ---
+// =============================================
+
 // TASK MODAL (pro piny z plánu)
 function openTaskModal(x, y) {
     if (state.workers.length === 0) {
@@ -809,6 +927,7 @@ function saveTask(event) {
             x: x,
             y: y,
             timestamp: Date.now()
+            // TODO: Přidat 'pageNum: canvasState.currentPageNum'
         };
         state.workEntries.push(newEntry);
         showToast('Stůl přidán', 'success');
@@ -818,7 +937,7 @@ function saveTask(event) {
     renderCanvasWithPins();
     renderRecordsList();
     updateStatistics();
-    renderProjectLegend(projectId); // Aktualizovat legendu
+    renderWorkerBadges(projectId); // Aktualizovat legendu
     closeModal('taskModal');
 }
 
@@ -894,9 +1013,7 @@ function updateTimerDisplay() {
 }
 
 
-// --- NOVÉ FUNKCE PRO RUČNÍ ZADÁNÍ ---
-
-// --- Ruční zadání hodin ---
+// --- Funkce pro ruční zadání ---
 function openManualHourModal() {
     document.getElementById('manualHourForm').reset();
     document.getElementById('manualHourDate').valueAsDate = new Date(); // Nastavit dnešní datum
@@ -947,7 +1064,6 @@ function saveManualHours(event) {
     showToast(`Ručně přidáno ${totalHours}h pro ${worker.name}`, 'success');
 }
 
-// --- Ruční zadání stolů ---
 function openManualTaskModal() {
     document.getElementById('manualTaskForm').reset();
     document.getElementById('manualTaskDate').valueAsDate = new Date(); // Nastavit dnešVní datum
@@ -1011,17 +1127,14 @@ async function saveManualTask(event) {
     
     // Aktualizovat legendu, pokud je zobrazený projekt ten, do kterého se přidávalo
     if (document.getElementById('projectSelect').value === projectId) {
-        renderProjectLegend(projectId);
+        renderWorkerBadges(projectId);
     }
 
     closeModal('manualTaskModal');
     showToast(`Ručně přidáno ${entriesAdded} stolů`, 'success');
 }
 
-// --- KONEC NOVÝCH FUNKCÍ ---
-
-
-// RECORDS
+// --- RECORDS ---
 function renderRecordsList() {
     const container = document.getElementById('recordsList');
     
@@ -1159,7 +1272,7 @@ function deleteEntry(entryId) {
             if (entry.x !== null) {
                 renderCanvasWithPins();
             }
-            renderProjectLegend(projectId); // Aktualizovat legendu
+            renderWorkerBadges(projectId); // Aktualizovat legendu
         }
 
         updateStatistics();
@@ -1167,7 +1280,7 @@ function deleteEntry(entryId) {
     }
 }
 
-// STATS
+// --- STATS ---
 function updateStatistics() {
     const workerFilter = document.getElementById('statsWorkerFilter').value;
     const projectFilter = document.getElementById('statsProjectFilter').value;
@@ -1272,7 +1385,7 @@ function updateStatistics() {
     }
 }
 
-// DAILY REPORT
+// --- DAILY REPORT ---
 function generateDailyReport() {
     const dateInput = document.getElementById('reportDate').value;
     if (!dateInput) {
@@ -1399,7 +1512,7 @@ function copyReport() {
     });
 }
 
-// Funkce pro Zálohu a Obnovu
+// --- Záloha a Obnova ---
 async function backupData() {
     showLoader();
     try {
