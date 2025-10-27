@@ -8,31 +8,24 @@
     <meta name="theme-color" content="#1e293b">
     <title>Solar Work Count Lithuania by Marty Party</title>
 
-    <!-- App assets -->
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
 
-    <!-- PDF.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 </head>
 <body>
-    <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <!-- Loader -->
     <div id="loader" class="loader">
         <div class="loader-spinner"></div>
     </div>
 
-    <!-- Header -->
     <div class="header">
         <h1>Solar Work Count Lithuania</h1>
         <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px;">by Marty Party</div>
     </div>
 
-    <!-- Pages Container -->
     <div class="pages-container">
-        <!-- PAGE 1: PLÁN -->
         <div id="page-plan" class="page active">
             <div class="card mb-16">
                 <div class="form-group">
@@ -62,7 +55,6 @@
             </div>
         </div>
 
-        <!-- PAGE 2: ZÁZNAMY -->
         <div id="page-records" class="page">
             <div class="card mb-16">
                 <h2 class="mb-16" style="font-size: 18px;">Časovač Směny</h2>
@@ -116,7 +108,6 @@
             <div id="recordsList"></div>
         </div>
 
-        <!-- PAGE 3: STATISTIKY -->
         <div id="page-statistics" class="page">
             <div class="stats-grid">
                 <div class="stat-card">
@@ -164,7 +155,6 @@
             </div>
         </div>
 
-        <!-- PAGE 4: NASTAVENÍ -->
         <div id="page-settings" class="page">
             <div class="card mb-24">
                 <h2 class="mb-16" style="font-size: 18px;">Správa Projektů</h2>
@@ -178,18 +168,29 @@
                 <div id="workersList"></div>
             </div>
 
-            <div class="card">
-                <h2 class="mb-16" style="font-size: 18px;">Denní Report</h2>
+            <div class="card mb-24"> <h2 class="mb-16" style="font-size: 18px;">Denní Report</h2>
                 <div class="form-group">
                     <label class="form-label">Datum</label>
                     <input type="date" id="reportDate" class="form-control">
                 </div>
                 <button onclick="generateDailyReport()" class="btn btn-primary w-full">Generovat Denní Report</button>
             </div>
-        </div>
+
+            <div class="card mb-24">
+                <h2 class="mb-16" style="font-size: 18px;">Záloha a Obnova</h2>
+                <div class="flex gap-8">
+                    <button id="backupButton" class="btn btn-secondary w-full">Zálohovat Data</button>
+                    <button id="restoreButton" class="btn btn-primary w-full">Obnovit Data</button>
+                </div>
+                <input type="file" id="restoreFileInput" accept="application/json" style="display: none;">
+                <p style="font-size: 12px; color: var(--color-text-secondary); margin-top: 12px;">
+                    Záloha uloží všechny projekty, pracovníky, záznamy a nahrané PDF soubory do jednoho .json souboru.
+                    Obnova přepíše všechna aktuální data!
+                </p>
+            </div>
+            </div>
     </div>
 
-    <!-- Bottom Navigation -->
     <nav class="bottom-nav">
         <div class="nav-item active" onclick="navigateTo('plan')" data-page="plan">
             <div class="nav-icon">📋</div>
@@ -209,7 +210,6 @@
         </div>
     </nav>
 
-    <!-- Modal: Add/Edit Project -->
     <div id="projectModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -235,7 +235,6 @@
         </div>
     </div>
 
-    <!-- Modal: Add/Edit Worker -->
     <div id="workerModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -264,7 +263,6 @@
         </div>
     </div>
 
-    <!-- Modal: Add Task (Pin on Plan) -->
     <div id="taskModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -297,7 +295,6 @@
         </div>
     </div>
 
-    <!-- Modal: Daily Report -->
     <div id="reportModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
