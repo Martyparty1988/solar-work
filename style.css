@@ -1,4 +1,3 @@
-
 * {
     margin: 0;
     padding: 0;
@@ -17,6 +16,16 @@
     --color-text-secondary: #94a3b8;
     --border-radius: 12px;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Paleta barev pro pracovníky */
+    --worker-color-1: #ef4444; /* červená */
+    --worker-color-2: #f97316; /* oranžová */
+    --worker-color-3: #22c55e; /* zelená */
+    --worker-color-4: #3b82f6; /* modrá */
+    --worker-color-5: #a855f7; /* fialová */
+    --worker-color-6: #ec4899; /* růžová */
+    --worker-color-7: #22d3ee; /* tyrkysová */
+    --worker-color-8: #a3e635; /* limetková */
 }
 
 body {
@@ -87,7 +96,7 @@ body {
 
 #pdfCanvas {
     display: block;
-    cursor: crosshair;
+    cursor: pointer; /* Změněno z crosshair na pointer */
 }
 
 /* Buttons */
@@ -395,7 +404,13 @@ select.form-control {
 }
 
 .list-item-info { flex: 1; }
-.list-item-title { font-weight: 600; margin-bottom: 4px; }
+.list-item-title { 
+    font-weight: 600; 
+    margin-bottom: 4px; 
+    display: flex;
+    align-items: center;
+    gap: 8px; /* mezera mezi tečkou a jménem */
+}
 .list-item-subtitle { font-size: 14px; color: var(--color-text-secondary); }
 
 /* Chart placeholder */
@@ -410,4 +425,44 @@ select.form-control {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Worker Color Dot */
+.worker-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    flex-shrink: 0; /* zajistí, že se tečka nezdeformuje */
+}
+
+/* Project Legend */
+.project-legend {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 16px;
+}
+.project-legend h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 12px;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: var(--color-text);
+}
+
+/* Barva tečky v záznamech (přidáno) */
+.record-item .worker-color-dot {
+    width: 10px;
+    height: 10px;
+}
+.record-item-worker-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
