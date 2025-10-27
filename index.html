@@ -8,6 +8,11 @@
     <meta name="theme-color" content="#1e293b">
     <title>Solar Work Count Lithuania by Marty Party</title>
 
+    <!-- Import písma (přesunuto z CSS pro rychlejší načtení) -->
+    <link rel_transformed="preconnect" href="https://fonts.googleapis.com">
+    <link rel_transformed="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- App assets -->
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
@@ -32,8 +37,13 @@
 
     <!-- Pages Container -->
     <div class="pages-container">
-        <!-- PAGE 1: PLÁN -->
+        
+        <!-- ======================================== -->
+        <!-- PAGE 1: PLÁN (Přepracováno) -->
+        <!-- ======================================== -->
         <div id="page-plan" class="page active">
+            
+            <!-- Hlavní karta pro výběr projektu -->
             <div class="card mb-16">
                 <div class="form-group">
                     <label class="form-label">Vyberte Projekt</label>
@@ -41,22 +51,66 @@
                         <option value="">-- Vyberte projekt --</option>
                     </select>
                 </div>
-                <!-- Legenda pro pracovníky -->
-                <div id="projectLegend" class="project-legend mt-16"></div>
             </div>
 
-            <div id="canvasWrapper" style="display: none;">
-                <div class="flex-between mb-16">
-                    <div style="font-size: 14px; color: var(--color-text-secondary);">
-                        Ťukněte na plán pro přidání/úpravu
+            <!-- Nová struktura karty plánu (zobrazí se po výběru projektu) -->
+            <div id="plan-card" class="plan-card" style="display: none;">
+                
+                <!-- 1. Hlavička -->
+                <div class="plan-header">
+                    <div>
+                        <h2 id="plan-title" class="plan-title">Název Projektu</h2>
+                        <div id="plan-date" class="plan-date">...</div>
                     </div>
-                    <button id="resetZoom" class="btn-secondary" style="padding: 8px 16px; font-size: 14px;">Reset Zoom</button>
+                    <div class="plan-actions">
+                        <button class="btn btn-secondary" style="padding: 0.5em 1em; font-size: 14px;">Export (WIP)</button>
+                    </div>
                 </div>
-                <div class="canvas-container glass" id="canvasContainer">
-                    <canvas id="pdfCanvas"></canvas>
-                </div>
-            </div>
 
+                <!-- 2. PDF Preview & Ovládání -->
+                <div>
+                    <div class="pdf-controls">
+                        <div class="flex gap-8">
+                            <button id="prevPage" class="pdf-btn">‹</button>
+                            <div id="pageIndicator" class="pdf-page-indicator">1 / 1</div>
+                            <button id="nextPage" class="pdf-btn">›</button>
+                        </div>
+                        <div class="flex gap-8">
+                            <button id="zoomOut" class="pdf-btn">-</button>
+                            <div id="zoomIndicator" class="pdf-zoom-indicator">100%</div>
+                            <button id="zoomIn" class="pdf-btn">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="pdf-preview" id="canvasContainer">
+                        <canvas id="pdfCanvas"></canvas>
+                    </div>
+                    <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 12px; text-align: center;">
+                        Ťuk: Přidat | Podržet: Info | 3 Prsty: Reset Zoom
+                    </div>
+                </div>
+                    
+                <!-- 3. Seznam Pracovníků (Legenda) -->
+                <div>
+                    <h3 class="subsection-title">Pracovníci na projektu</h3>
+                    <div id="projectLegend" class="worker-badges">
+                        <!-- Sem přijde legenda generovaná z JS -->
+                    </div>
+                </div>
+
+                <!-- 4. Timeline (Placeholder) -->
+                <div>
+                    <h3 class="subsection-title">Postup (Timeline)</h3>
+                    <div class="timeline">
+                        <div class="timeline-step">Start</div>
+                        <div class="timeline-step" style="background: var(--color-primary); color: white; box-shadow: 0 0 10px var(--color-primary-glow);">V Průběhu</div>
+                        <div class="timeline-step" style="opacity: 0.5;">Hotovo</div>
+                    </div>
+                </div>
+
+            </div> <!-- Konec .plan-card -->
+
+            <!-- Zpráva, pokud není vybrán projekt -->
             <div id="noPlanMessage" class="empty-state">
                 <div class="empty-state-icon">📋</div>
                 <div>Nejprve vyberte projekt</div>
@@ -64,7 +118,9 @@
             </div>
         </div>
 
+        <!-- ======================================== -->
         <!-- PAGE 2: ZÁZNAMY -->
+        <!-- ======================================== -->
         <div id="page-records" class="page">
             <div class="card mb-16">
                 <h2 class="mb-16" style="font-size: 18px;">Časovač Směny</h2>
@@ -81,7 +137,7 @@
                 </div>
             </div>
 
-            <!-- NOVÁ KARTA: Ruční Zadání -->
+            <!-- KARTA: Ruční Zadání -->
             <div class="card mb-16">
                 <h2 class="mb-16" style="font-size: 18px;">Ruční Zadání Záznamu</h2>
                 <div class="flex gap-8">
@@ -89,7 +145,6 @@
                     <button onclick="openManualTaskModal()" class="btn btn-secondary w-full">Zadat Stoly</button>
                 </div>
             </div>
-            <!-- KONEC NOVÉ KARTY -->
 
             <h2 style="font-size: 18px; margin-bottom: 16px;">Všechny Záznamy</h2>
             <div class="card mb-16">
@@ -128,7 +183,9 @@
             <div id="recordsList"></div>
         </div>
 
+        <!-- ======================================== -->
         <!-- PAGE 3: STATISTIKY -->
+        <!-- ======================================== -->
         <div id="page-statistics" class="page">
             <div class="stats-grid">
                 <div class="stat-card">
@@ -176,7 +233,9 @@
             </div>
         </div>
 
+        <!-- ======================================== -->
         <!-- PAGE 4: NASTAVENÍ -->
+        <!-- ======================================== -->
         <div id="page-settings" class="page">
             <div class="card mb-24">
                 <h2 class="mb-16" style="font-size: 18px;">Správa Projektů</h2>
@@ -214,6 +273,10 @@
             </div>
         </div>
     </div>
+
+    <!-- ======================================== -->
+    <!-- SPODNÍ NAVIGACE A MODÁLY -->
+    <!-- ======================================== -->
 
     <!-- Bottom Navigation -->
     <nav class="bottom-nav">
@@ -323,7 +386,7 @@
         </div>
     </div>
 
-    <!-- NOVÝ MODÁL: Manual Hour Entry -->
+    <!-- MODÁL: Manual Hour Entry -->
     <div id="manualHourModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -350,9 +413,8 @@
             </form>
         </div>
     </div>
-    <!-- KONEC NOVÉHO MODÁLU -->
 
-    <!-- NOVÝ MODÁL: Manual Task Entry -->
+    <!-- MODÁL: Manual Task Entry -->
     <div id="manualTaskModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -387,7 +449,6 @@
             </form>
         </div>
     </div>
-    <!-- KONEC NOVÉHO MODÁLU -->
 
 
     <!-- Modal: Daily Report -->
@@ -397,7 +458,7 @@
                 <h3 class="modal-title">Denní Report</h3>
                 <button class="modal-close" onclick="closeModal('reportModal')">&times;</button>
             </div>
-            <div id="reportContent" style="background: rgba(255,255,255,0.05); padding: 16px; border-radius: 8px; font-family: monospace; font-size: 14px; white-space: pre-wrap; max-height: 400px; overflow-y: auto;"></div>
+            <div id="reportContent" style="background: rgba(0,0,0,0.2); padding: 16px; border-radius: 8px; font-family: monospace; font-size: 14px; white-space: pre-wrap; max-height: 400px; overflow-y: auto;"></div>
             <button onclick="copyReport()" class="btn btn-primary w-full mt-16">Kopírovat Text</button>
         </div>
     </div>
