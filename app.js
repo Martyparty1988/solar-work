@@ -1,6 +1,18 @@
 // PDF.js Worker Configuration
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
+// Paleta barev pro pracovníky
+const WORKER_COLORS = [
+    '#ef4444', // červená
+    '#f97316', // oranžová
+    '#22c55e', // zelená
+    '#3b82f6', // modrá
+    '#a855f7', // fialová
+    '#ec4899', // růžová
+    '#22d3ee', // tyrkysová
+    '#a3e635'  // limetková
+];
+
 // State Management
 let state = {
     projects: [], 
@@ -100,7 +112,7 @@ function deletePDF(id) {
     });
 }
 
-// Nové IndexedDB helpers pro Zálohu/Obnovu
+// IndexedDB helpers pro Zálohu/Obnovu
 function getAllPDFs() {
     return new Promise((resolve, reject) => {
         if (!db) return reject('DB not initialized');
@@ -124,7 +136,6 @@ function clearPDFStore() {
         request.onerror = (event) => reject(event.target.error);
     });
 }
-// Konec nových IndexedDB helpers
 
 // Initialize App
 async function initApp() {
@@ -142,7 +153,6 @@ async function initApp() {
     document.getElementById('backupButton').addEventListener('click', backupData);
     document.getElementById('restoreButton').addEventListener('click', triggerRestore);
     document.getElementById('restoreFileInput').addEventListener('change', restoreData);
-    // Konec listenerů
     
     renderProjectsDropdown();
     renderWorkersList();
@@ -150,10 +160,10 @@ async function initApp() {
     renderRecordsList();
     updateStatistics();
     
-    // Set today's date for report
+    // Nastavit dnešní datum pro report
     document.getElementById('reportDate').valueAsDate = new Date();
     
-    // Restore running timer
+    // Obnovit běžící časovač
     if (timerState.isRunning && timerState.startTime) {
         document.getElementById('startShift').style.display = 'none';
         document.getElementById('stopShift').style.display = 'block';
@@ -166,7 +176,7 @@ async function initApp() {
         timerState.startTime = null;
     }
     
-    // Navigate to settings if no projects
+    // Navigovat do nastavení, pokud nejsou projekty
     if (state.projects.length === 0) {
         navigateTo('settings');
     }
@@ -206,7 +216,7 @@ function saveState() {
 
     localStorage.setItem('solarWorkState_v3', JSON.stringify(stateToSave));
     localStorage.setItem('solarWorkTimer_v3', JSON.stringify(timerState));
-    console.log('State saved to localStorage (metadata only)');
+    console.log('State saved to localStorage');
 }
 
 // Navigation
@@ -222,6 +232,11 @@ function navigateTo(pageName) {
         renderProjectsDropdown();
     }
     else if (pageName === 'statistics') updateStatistics();
+    else if (pageName === 'plan') {
+        // Vykreslit legendu při přechodu na Plán
+        const projectId = document.getElementById('projectSelect').value;
+        renderProjectLegend(projectId);
+    }
 }
 
 // Listeners
@@ -336,6 +351,7 @@ async function deleteProject(projectId) {
         saveState();
         renderProjectsList();
         renderProjectsDropdown();
+        renderProjectLegend(null); // Vyčistit legendu
         showToast('Projekt smazán', 'success');
     }
 }
@@ -382,6 +398,7 @@ function openWorkerModal(workerId = null) {
         document.getElementById('workerName').value = worker.name;
         document.getElementById('workerCode').value = worker.code || '';
         document.getElementById('workerRate').value = worker.hourlyRate;
+        // Barva se nemění při úpravě
     } else {
         document.getElementById('workerModalTitle').textContent = 'Přidat Nového Pracovníka';
         document.getElementById('workerForm').reset();
@@ -397,16 +414,19 @@ function saveWorker(event) {
     const workerRate = parseFloat(document.getElementById('workerRate').value);
 
     if (workerId) {
+        // Úprava
         const worker = state.workers.find(w => w.id === workerId);
         worker.name = workerName;
         worker.code = workerCode;
         worker.hourlyRate = workerRate;
     } else {
+        // Nový pracovník
         const newWorker = {
             id: 'worker-' + Date.now(),
             name: workerName,
             code: workerCode,
-            hourlyRate: workerRate
+            hourlyRate: workerRate,
+            color: WORKER_COLORS[state.workers.length % WORKER_COLORS.length] // Přidání barvy
         };
         state.workers.push(newWorker);
     }
@@ -420,6 +440,7 @@ function saveWorker(event) {
 function deleteWorker(workerId) {
     if (confirm('Opravdu chcete smazat tohoto pracovníka?')) {
         state.workers = state.workers.filter(w => w.id !== workerId);
+        // Záznamy o práci zůstanou, ale budou se zobrazovat jako "Neznámý"
         saveState();
         renderWorkersList();
         showToast('Pracovník smazán', 'success');
@@ -439,7 +460,10 @@ function renderWorkersList() {
         container.innerHTML = state.workers.map(worker => `
             <div class="list-item">
                 <div class="list-item-info">
-                    <div class="list-item-title">${worker.name}</div>
+                    <div class="list-item-title">
+                        <span class="worker-color-dot" style="background-color: ${worker.color || '#94a3b8'}"></span>
+                        ${worker.name}
+                    </div>
                     <div class="list-item-subtitle">Kód: <strong>${worker.code || 'N/A'}</strong> | €${worker.hourlyRate.toFixed(2)}/hod</div>
                 </div>
                 <div class="flex gap-8">
@@ -461,6 +485,7 @@ function renderWorkersList() {
 // PLAN loading
 async function loadProjectPlan() {
     const projectId = document.getElementById('projectSelect').value;
+    renderProjectLegend(projectId); // Vykreslit legendu při každé změně
     
     if (!projectId) {
         document.getElementById('canvasWrapper').style.display = 'none';
@@ -556,28 +581,60 @@ function drawPins(context) {
     const totalScale = canvasState.baseScale * canvasState.currentZoom;
     
     entries.forEach((entry) => {
+        const worker = state.workers.find(w => w.id === entry.workerId);
+        const color = worker ? worker.color : '#94a3b8'; // Šedá jako fallback
+        
         const x = (entry.x * totalScale) + canvasState.panOffsetX;
         const y = (entry.y * totalScale) + canvasState.panOffsetY;
         
         context.beginPath();
         context.arc(x, y, 12, 0, 2 * Math.PI);
-        context.fillStyle = 'rgba(74, 222, 128, 0.8)';
+        // Použití barvy pracovníka s 80% průhledností (cc)
+        context.fillStyle = color + 'cc'; 
         context.fill();
-        context.strokeStyle = '#fff';
+        context.strokeStyle = '#fff'; // Bílý okraj
         context.lineWidth = 2;
         context.stroke();
         
-        context.fillStyle = '#000';
+        context.fillStyle = '#000'; // Černý text pro kód
         context.font = 'bold 10px sans-serif';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
         context.fillText(entry.workerCode || '?', x, y); 
         
-        context.fillStyle = '#fff';
+        context.fillStyle = '#fff'; // Bílý text pro číslo stolu
         context.font = 'bold 10px sans-serif';
         context.textAlign = 'center';
         context.fillText(entry.tableNumber, x, y + 25);
     });
+}
+
+// Vykreslení legendy
+function renderProjectLegend(projectId) {
+    const container = document.getElementById('projectLegend');
+    if (!projectId) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    const projectEntries = state.workEntries.filter(e => e.type === 'task' && e.projectId === projectId);
+    const workerIds = [...new Set(projectEntries.map(e => e.workerId))];
+    const workers = workerIds.map(id => state.workers.find(w => w.id === id)).filter(Boolean); // .filter(Boolean) odstraní případné 'undefined'
+    
+    if (workers.length === 0) {
+        container.innerHTML = '<div class="legend-item" style="color: var(--color-text-secondary);">Žádné záznamy pro tento projekt.</div>';
+        return;
+    }
+    
+    container.innerHTML = `
+        <h4 style="font-size: 14px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 12px;">Legenda:</h4>
+        ${workers.map(w => `
+            <div class="legend-item">
+                <span class="worker-color-dot" style="background-color: ${w.color || '#94a3b8'}"></span>
+                ${w.name} (${w.code || 'N/A'})
+            </div>
+        `).join('')}
+    `;
 }
 
 function resetZoom() {
@@ -641,6 +698,7 @@ function handleTouchEnd(e) {
     const touchDuration = Date.now() - canvasState.touchStartTime;
     
     if (touchDuration < 300 && !canvasState.touchMoved && e.changedTouches.length === 1) {
+        // Byl to "ťuk" (tap)
         const rect = e.target.getBoundingClientRect();
         const x = e.changedTouches[0].clientX - rect.left;
         const y = e.changedTouches[0].clientY - rect.top;
@@ -649,7 +707,29 @@ function handleTouchEnd(e) {
         const pdfX = (x - canvasState.panOffsetX) / totalScale;
         const pdfY = (y - canvasState.panOffsetY) / totalScale;
         
-        openTaskModal(pdfX, pdfY);
+        // Zjistit, zda bylo kliknuto na existující pin
+        const projectId = document.getElementById('projectSelect').value;
+        const entries = state.workEntries.filter(en => en.type === 'task' && en.projectId === projectId);
+        
+        // Poloměr kliknutí (např. 15px) převedený na PDF koordináty
+        const clickRadius = 15 / totalScale; 
+        
+        let clickedPin = null;
+        for (const entry of entries) {
+            const distance = Math.sqrt(Math.pow(pdfX - entry.x, 2) + Math.pow(pdfY - entry.y, 2));
+            if (distance < clickRadius) {
+                clickedPin = entry;
+                break;
+            }
+        }
+        
+        if (clickedPin) {
+            // Otevřít mód pro úpravu
+            openEditTaskModal(clickedPin.id);
+        } else {
+            // Otevřít mód pro nový úkol
+            openTaskModal(pdfX, pdfY);
+        }
     }
     
     canvasState.isDragging = false;
@@ -730,6 +810,7 @@ function saveTask(event) {
     renderCanvasWithPins();
     renderRecordsList();
     updateStatistics();
+    renderProjectLegend(projectId); // Aktualizovat legendu
     closeModal('taskModal');
 }
 
@@ -865,6 +946,7 @@ function renderRecordsList() {
     container.innerHTML = entries.map(entry => {
         const worker = state.workers.find(w => w.id === entry.workerId);
         const workerName = worker ? worker.name : 'Neznámý';
+        const workerColor = worker ? worker.color : '#94a3b8';
         
         if (entry.type === 'task') {
             const project = state.projects.find(p => p.id === entry.projectId);
@@ -882,7 +964,10 @@ function renderRecordsList() {
                     </div>
                     <div style="margin-bottom: 8px;"><strong>${entry.tableNumber}</strong></div>
                     <div style="font-size: 14px; color: var(--color-text-secondary);">
-                        <div>👷 ${workerName} (<strong>Kód: ${entry.workerCode || 'N/A'}</strong>)</div>
+                        <div class="record-item-worker-name">
+                            <span class="worker-color-dot" style="background-color: ${workerColor}"></span>
+                            👷 ${workerName} (<strong>Kód: ${entry.workerCode || 'N/A'}</strong>)
+                        </div>
                         <div>📋 ${projectName}</div>
                         <div>💰 €${entry.reward.toFixed(2)}</div>
                         <div>📅 ${date.toLocaleDateString('cs-CZ')} ${date.toLocaleTimeString('cs-CZ')}</div>
@@ -901,7 +986,10 @@ function renderRecordsList() {
                             <button onclick="deleteEntry('${entry.id}')" class="record-btn btn-danger" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
                         </div>
                     </div>
-                    <div style="margin-bottom: 8px;"><strong>${workerName}</strong></div>
+                    <div style="margin-bottom: 8px;" class="record-item-worker-name">
+                        <span class="worker-color-dot" style="background-color: ${workerColor}"></span>
+                        <strong>${workerName}</strong>
+                    </div>
                     <div style="font-size: 14px; color: var(--color-text-secondary);">
                         <div>⏱️ ${entry.totalHours.toFixed(2)} hodin</div>
                         <div>💰 €${entry.totalEarned.toFixed(2)}</div>
@@ -916,10 +1004,21 @@ function renderRecordsList() {
 
 function deleteEntry(entryId) {
     if (confirm('Opravdu chcete smazat tento záznam?')) {
+        const entry = state.workEntries.find(e => e.id === entryId);
+        let projectId = null;
+        if (entry && entry.type === 'task') {
+            projectId = entry.projectId;
+        }
+
         state.workEntries = state.workEntries.filter(e => e.id !== entryId);
         saveState();
         renderRecordsList();
-        renderCanvasWithPins();
+        
+        if (projectId) {
+            renderCanvasWithPins(); // Překreslit plátno
+            renderProjectLegend(projectId); // Aktualizovat legendu
+        }
+
         updateStatistics();
         showToast('Záznam smazán', 'success');
     }
@@ -956,37 +1055,40 @@ function updateStatistics() {
     document.getElementById('statAvgReward').textContent = `€${avgReward.toFixed(2)}`;
     
     const workerEarnings = {};
-    state.workers.forEach(w => { workerEarnings[w.name] = 0; });
+    // Použít jen pracovníky, kteří mají záznamy ve filtrech
+    const relevantWorkers = state.workers.filter(w => entries.some(e => e.workerId === w.id));
+
+    relevantWorkers.forEach(w => { 
+        workerEarnings[w.id] = { name: w.name, color: w.color, amount: 0 }; 
+    });
     
     entries.forEach(entry => {
-        const worker = state.workers.find(w => w.id === entry.workerId);
-        const workerName = worker ? worker.name : 'Neznámý';
-        
-        if (workerEarnings[workerName] === undefined) {
-            workerEarnings[workerName] = 0;
-        }
-        
-        if (entry.type === 'task') {
-            workerEarnings[workerName] += entry.reward;
-        } else {
-            workerEarnings[workerName] += entry.totalEarned;
+        if (workerEarnings[entry.workerId]) {
+            if (entry.type === 'task') {
+                workerEarnings[entry.workerId].amount += entry.reward;
+            } else {
+                workerEarnings[entry.workerId].amount += entry.totalEarned;
+            }
         }
     });
     
     const workerChart = document.getElementById('workerEarningsChart');
-    const workerEntries = Object.entries(workerEarnings).filter(([name, amount]) => amount > 0);
+    const workerEntries = Object.values(workerEarnings).filter(data => data.amount > 0);
     
     if (workerEntries.length > 0) {
         workerChart.innerHTML = workerEntries
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, amount]) => `
+            .sort((a, b) => b.amount - a.amount)
+            .map(data => `
                 <div style="margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                        <span>${name}</span>
-                        <span style="font-weight: 600;">€${amount.toFixed(2)}</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="display: flex; align-items: center; gap: 8px;">
+                            <span class="worker-color-dot" style="background-color: ${data.color || '#94a3b8'}"></span>
+                            ${data.name}
+                        </span>
+                        <span style="font-weight: 600;">€${data.amount.toFixed(2)}</span>
                     </div>
                     <div style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow: hidden;">
-                        <div style="background: linear-gradient(90deg, #3b82f6, #8b5cf6); height: 100%; width: ${totalEarnings > 0 ? (amount / totalEarnings * 100).toFixed(1) : 0}%;"></div>
+                        <div style="background: ${data.color || 'var(--color-primary)'}; height: 100%; width: ${totalEarnings > 0 ? (data.amount / totalEarnings * 100).toFixed(1) : 0}%;"></div>
                     </div>
                 </div>
             `).join('');
@@ -1153,7 +1255,7 @@ function copyReport() {
     });
 }
 
-// Nové funkce pro Zálohu a Obnovu
+// Funkce pro Zálohu a Obnovu
 async function backupData() {
     showLoader();
     try {
@@ -1195,7 +1297,6 @@ async function backupData() {
 }
 
 function triggerRestore() {
-    // Tato funkce je volána tlačítkem "Obnovit Data"
     document.getElementById('restoreFileInput').click();
 }
 
@@ -1275,7 +1376,6 @@ async function restoreData(event) {
     
     reader.readAsText(file);
 }
-// Konec nových funkcí pro Zálohu a Obnovu
 
 // Boot
 window.addEventListener('DOMContentLoaded', initApp);
