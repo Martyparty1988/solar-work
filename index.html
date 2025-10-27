@@ -344,20 +344,26 @@
                 <input type="hidden" id="taskEntryId">
                 <input type="hidden" id="taskX">
                 <input type="hidden" id="taskY">
+                
+                <!-- ZMĚNA: Select nahrazen Checkboxy -->
                 <div class="form-group">
-                    <label class="form-label">Pracovník</label>
-                    <select id="taskWorker" class="form-control" required>
-                        <option value="">-- Vyberte pracovníka --</option>
-                    </select>
+                    <label class="form-label">Pracovníci</label>
+                    <div id="taskWorkerChecklist" class="worker-checklist">
+                        <!-- Bude naplněno JS -->
+                    </div>
                 </div>
+                
                 <div class="form-group">
                     <label class="form-label">Číslo Stolu/Stringu</label>
                     <input type="text" id="taskTableNumber" class="form-control" required>
                 </div>
+                
+                <!-- ZMĚNA: Přejmenováno id a label -->
                 <div class="form-group">
-                    <label class="form-label">Odměna (€)</label>
-                    <input type="number" id="taskReward" class="form-control" step="0.01" min="0" required>
+                    <label class="form-label">Odměna na pracovníka (€)</label>
+                    <input type="number" id="taskRewardPerWorker" class="form-control" step="0.01" min="0" required>
                 </div>
+                
                 <div class="flex gap-8">
                     <button type="button" onclick="closeModal('taskModal')" class="btn btn-secondary w-full">Zrušit</button>
                     <button type="submit" class="btn btn-primary w-full">Uložit</button>
@@ -402,10 +408,15 @@
                 <button class="modal-close" onclick="closeModal('manualTaskModal')">&times;</button>
             </div>
             <form id="manualTaskForm" onsubmit="saveManualTask(event)">
+                
+                <!-- ZMĚNA: Select nahrazen Checkboxy -->
                 <div class="form-group">
-                    <label class="form-label">Pracovník</label>
-                    <select id="manualTaskWorker" class="form-control" required></select>
+                    <label class="form-label">Pracovníci</label>
+                    <div id="manualTaskWorkerChecklist" class="worker-checklist">
+                        <!-- Bude naplněno JS -->
+                    </div>
                 </div>
+
                 <div class="form-group">
                     <label class="form-label">Projekt</label>
                     <select id="manualTaskProject" class="form-control" required></select>
@@ -418,10 +429,13 @@
                     <label class="form-label">Čísla Stolů (oddělte čárkou, např: 1, 2, 5A)</label>
                     <input type="text" id="manualTaskTableNumbers" class="form-control" required>
                 </div>
+                
+                <!-- ZMĚNA: Přejmenováno id a label -->
                 <div class="form-group">
-                    <label class="form-label">Odměna za 1 stůl (€)</label>
-                    <input type="number" id="manualTaskRewardPerTable" class="form-control" step="0.01" min="0" required>
+                    <label class="form-label">Odměna na pracovníka (€)</label>
+                    <input type="number" id="manualTaskRewardPerWorker" class="form-control" step="0.01" min="0" required>
                 </div>
+
                 <div class="flex gap-8">
                     <button type="button" onclick="closeModal('manualTaskModal')" class="btn btn-secondary w-full">Zrušit</button>
                     <button type="submit" class="btn btn-primary w-full">Uložit</button>
