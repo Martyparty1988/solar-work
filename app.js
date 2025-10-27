@@ -100,6 +100,32 @@ function deletePDF(id) {
     });
 }
 
+// Nové IndexedDB helpers pro Zálohu/Obnovu
+function getAllPDFs() {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject('DB not initialized');
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = (event) => {
+            resolve(event.target.result);
+        };
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
+
+function clearPDFStore() {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject('DB not initialized');
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
+// Konec nových IndexedDB helpers
+
 // Initialize App
 async function initApp() {
     try {
@@ -111,6 +137,13 @@ async function initApp() {
 
     loadState();
     setupEventListeners();
+    
+    // Listenery pro Zálohu/Obnovu
+    document.getElementById('backupButton').addEventListener('click', backupData);
+    document.getElementById('restoreButton').addEventListener('click', triggerRestore);
+    document.getElementById('restoreFileInput').addEventListener('change', restoreData);
+    // Konec listenerů
+    
     renderProjectsDropdown();
     renderWorkersList();
     renderProjectsList();
@@ -1119,6 +1152,130 @@ function copyReport() {
         showToast('Chyba při kopírování', 'error');
     });
 }
+
+// Nové funkce pro Zálohu a Obnovu
+async function backupData() {
+    showLoader();
+    try {
+        const localStorageState = localStorage.getItem('solarWorkState_v3');
+        const localStorageTimer = localStorage.getItem('solarWorkTimer_v3');
+        const indexedDBData = await getAllPDFs();
+        
+        const backupData = {
+            localStorage: {
+                solarWorkState_v3: localStorageState,
+                solarWorkTimer_v3: localStorageTimer
+            },
+            indexedDB: {
+                pdfStore: indexedDBData
+            }
+        };
+        
+        const jsonString = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        const date = new Date().toISOString().split('T')[0];
+        a.download = `solar_work_backup_${date}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        hideLoader();
+        showToast('Záloha úspěšně vytvořena', 'success');
+        
+    } catch (error) {
+        console.error('Chyba při vytváření zálohy:', error);
+        hideLoader();
+        showToast('Chyba při vytváření zálohy', 'error');
+    }
+}
+
+function triggerRestore() {
+    // Tato funkce je volána tlačítkem "Obnovit Data"
+    document.getElementById('restoreFileInput').click();
+}
+
+async function restoreData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!confirm('Opravdu chcete obnovit data ze zálohy? Všechna současná data budou přepsána!')) {
+        event.target.value = null; // Reset file input
+        return;
+    }
+
+    showLoader();
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+        try {
+            const backupData = JSON.parse(e.target.result);
+            
+            if (!backupData.localStorage || !backupData.indexedDB || !backupData.indexedDB.pdfStore) {
+                throw new Error('Neplatný formát souboru zálohy.');
+            }
+
+            // 1. Vymazat existující data
+            localStorage.removeItem('solarWorkState_v3');
+            localStorage.removeItem('solarWorkTimer_v3');
+            await clearPDFStore();
+            
+            // 2. Obnovit localStorage
+            if (backupData.localStorage.solarWorkState_v3) {
+                localStorage.setItem('solarWorkState_v3', backupData.localStorage.solarWorkState_v3);
+            }
+            if (backupData.localStorage.solarWorkTimer_v3) {
+                localStorage.setItem('solarWorkTimer_v3', backupData.localStorage.solarWorkTimer_v3);
+            }
+            
+            // 3. Obnovit IndexedDB
+            const pdfStoreData = backupData.indexedDB.pdfStore;
+            if (!db) {
+                await initDB(); // Ujistit se, že DB je připravena
+            }
+            
+            const transaction = db.transaction([STORE_NAME], 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            
+            for (const item of pdfStoreData) {
+                store.put(item);
+            }
+
+            await new Promise((resolve, reject) => {
+                transaction.oncomplete = () => resolve();
+                transaction.onerror = (event) => reject(event.target.error);
+            });
+
+            hideLoader();
+            showToast('Data úspěšně obnovena. Aplikace se restartuje.', 'success');
+            
+            // Restartovat aplikaci pro projevení změn
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+
+        } catch (error) {
+            console.error('Chyba při obnově dat:', error);
+            hideLoader();
+            showToast(`Chyba při obnově: ${error.message}`, 'error');
+        } finally {
+            event.target.value = null; // Reset file input
+        }
+    };
+    
+    reader.onerror = () => {
+        hideLoader();
+        showToast('Chyba při čtení souboru', 'error');
+        event.target.value = null; // Reset file input
+    };
+    
+    reader.readAsText(file);
+}
+// Konec nových funkcí pro Zálohu a Obnovu
 
 // Boot
 window.addEventListener('DOMContentLoaded', initApp);
