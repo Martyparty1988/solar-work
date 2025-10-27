@@ -228,8 +228,8 @@ function navigateTo(pageName) {
     });
     if (pageName === 'records') {
         renderRecordsList();
-        renderWorkersList();
-        renderProjectsDropdown();
+        renderWorkersList(); // Potřeba pro modály
+        renderProjectsDropdown(); // Potřeba pro modály
     }
     else if (pageName === 'statistics') updateStatistics();
     else if (pageName === 'plan') {
@@ -381,12 +381,14 @@ function renderProjectsDropdown() {
     const select = document.getElementById('projectSelect');
     const statsSelect = document.getElementById('statsProjectFilter');
     const recordsSelect = document.getElementById('recordsProjectFilter');
+    const manualTaskProjectSelect = document.getElementById('manualTaskProject'); // NOVÝ
     
     const options = state.projects.map(p => `<option value="${p.id}">${p.jmenoProjektu}</option>`).join('');
     
     select.innerHTML = '<option value="">-- Vyberte projekt --</option>' + options;
     statsSelect.innerHTML = '<option value="">Všechny projekty</option>' + options;
     if (recordsSelect) { recordsSelect.innerHTML = '<option value="">Všechny projekty</option>' + options; }
+    if (manualTaskProjectSelect) { manualTaskProjectSelect.innerHTML = '<option value="">-- Vyberte projekt --</option>' + options; } // NOVÝ
 }
 
 // WORKERS
@@ -453,6 +455,8 @@ function renderWorkersList() {
     const taskSelect = document.getElementById('taskWorker');
     const statsSelect = document.getElementById('statsWorkerFilter');
     const recordsSelect = document.getElementById('recordsWorkerFilter');
+    const manualHourSelect = document.getElementById('manualHourWorker'); // NOVÝ
+    const manualTaskSelect = document.getElementById('manualTaskWorker'); // NOVÝ
     
     if (state.workers.length === 0) {
         container.innerHTML = '<div class="empty-state" style="padding: 20px;">Žádní pracovníci</div>';
@@ -476,10 +480,13 @@ function renderWorkersList() {
     
     const workerOptions = state.workers.map(w => `<option value="${w.id}">${w.name} (${w.code || 'N/A'})</option>`).join('');
     
-    timerSelect.innerHTML = '<option value="">-- Vyberte pracovníka --</option>' + workerOptions;
-    taskSelect.innerHTML = '<option value="">-- Vyberte pracovníka --</option>' + workerOptions;
+    const optionsHtml = '<option value="">-- Vyberte pracovníka --</option>' + workerOptions;
+    timerSelect.innerHTML = optionsHtml;
+    taskSelect.innerHTML = optionsHtml;
     statsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions;
     if (recordsSelect) { recordsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions; }
+    if (manualHourSelect) { manualHourSelect.innerHTML = optionsHtml; } // NOVÝ
+    if (manualTaskSelect) { manualTaskSelect.innerHTML = optionsHtml; } // NOVÝ
 }
 
 // PLAN loading
@@ -577,7 +584,8 @@ function drawPins(context) {
     const projectId = document.getElementById('projectSelect').value;
     if (!projectId) return;
     
-    const entries = state.workEntries.filter(e => e.type === 'task' && e.projectId === projectId);
+    // Vykreslit pouze piny, které mají X/Y (tj. byly přidány z plánu)
+    const entries = state.workEntries.filter(e => e.type === 'task' && e.projectId === projectId && e.x !== null && e.y !== null);
     const totalScale = canvasState.baseScale * canvasState.currentZoom;
     
     entries.forEach((entry) => {
@@ -709,7 +717,7 @@ function handleTouchEnd(e) {
         
         // Zjistit, zda bylo kliknuto na existující pin
         const projectId = document.getElementById('projectSelect').value;
-        const entries = state.workEntries.filter(en => en.type === 'task' && en.projectId === projectId);
+        const entries = state.workEntries.filter(en => en.type === 'task' && en.projectId === projectId && en.x !== null);
         
         // Poloměr kliknutí (např. 15px) převedený na PDF koordináty
         const clickRadius = 15 / totalScale; 
@@ -735,7 +743,7 @@ function handleTouchEnd(e) {
     canvasState.isDragging = false;
 }
 
-// TASK MODAL
+// TASK MODAL (pro piny z plánu)
 function openTaskModal(x, y) {
     if (state.workers.length === 0) {
         showToast('Nejprve přidejte pracovníky v Nastavení', 'error');
@@ -885,6 +893,134 @@ function updateTimerDisplay() {
         `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+
+// --- NOVÉ FUNKCE PRO RUČNÍ ZADÁNÍ ---
+
+// --- Ruční zadání hodin ---
+function openManualHourModal() {
+    document.getElementById('manualHourForm').reset();
+    document.getElementById('manualHourDate').valueAsDate = new Date(); // Nastavit dnešní datum
+    openModal('manualHourModal');
+}
+
+function saveManualHours(event) {
+    event.preventDefault();
+    
+    const workerId = document.getElementById('manualHourWorker').value;
+    const dateInput = document.getElementById('manualHourDate').value;
+    const totalHours = parseFloat(document.getElementById('manualHourTotalHours').value);
+    
+    if (!workerId || !dateInput || !totalHours || totalHours <= 0) {
+        showToast('Vyplňte všechna pole', 'error');
+        return;
+    }
+
+    const worker = state.workers.find(w => w.id === workerId);
+    if (!worker) {
+        showToast('Pracovník nenalezen', 'error');
+        return;
+    }
+
+    const totalEarned = totalHours * worker.hourlyRate;
+    
+    // Nastavit čas začátku/konce podle data. Použijeme 8:00 jako výchozí.
+    const startTime = new Date(dateInput);
+    startTime.setHours(8, 0, 0, 0); // 8:00 AM
+    const endTime = new Date(startTime.getTime() + totalHours * 60 * 60 * 1000);
+
+    const newEntry = {
+        id: 'entry-' + Date.now(),
+        type: 'hourly',
+        workerId: workerId,
+        startTime: startTime.getTime(),
+        endTime: endTime.getTime(),
+        totalHours: totalHours,
+        totalEarned: totalEarned
+    };
+
+    state.workEntries.push(newEntry);
+    saveState();
+    
+    renderRecordsList();
+    updateStatistics();
+    closeModal('manualHourModal');
+    showToast(`Ručně přidáno ${totalHours}h pro ${worker.name}`, 'success');
+}
+
+// --- Ruční zadání stolů ---
+function openManualTaskModal() {
+    document.getElementById('manualTaskForm').reset();
+    document.getElementById('manualTaskDate').valueAsDate = new Date(); // Nastavit dnešVní datum
+    openModal('manualTaskModal');
+}
+
+async function saveManualTask(event) {
+    event.preventDefault();
+    
+    const workerId = document.getElementById('manualTaskWorker').value;
+    const projectId = document.getElementById('manualTaskProject').value;
+    const dateInput = document.getElementById('manualTaskDate').value;
+    const tableNumbersString = document.getElementById('manualTaskTableNumbers').value;
+    const rewardPerTable = parseFloat(document.getElementById('manualTaskRewardPerTable').value);
+
+    if (!workerId || !projectId || !dateInput || !tableNumbersString || rewardPerTable < 0) {
+        showToast('Vyplňte všechna pole', 'error');
+        return;
+    }
+
+    const worker = state.workers.find(w => w.id === workerId);
+    if (!worker) {
+        showToast('Pracovník nenalezen', 'error');
+        return;
+    }
+    const workerCode = worker ? (worker.code || '?') : '?';
+    
+    const tableNumbers = tableNumbersString.split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+    
+    if (tableNumbers.length === 0) {
+        showToast('Zadejte alespoň jedno číslo stolu', 'error');
+        return;
+    }
+    
+    const timestamp = new Date(dateInput);
+    timestamp.setHours(12, 0, 0, 0); // 12:00 jako výchozí čas
+    
+    let entriesAdded = 0;
+    tableNumbers.forEach((tableNum, index) => {
+        const newEntry = {
+            id: 'entry-' + Date.now() + '-' + index,
+            type: 'task',
+            projectId: projectId,
+            workerId: workerId,
+            workerCode: workerCode, 
+            tableNumber: tableNum,
+            reward: rewardPerTable,
+            x: null, // Ručně zadaný záznam nemá X
+            y: null, // Ručně zadaný záznam nemá Y
+            timestamp: timestamp.getTime()
+        };
+        state.workEntries.push(newEntry);
+        entriesAdded++;
+    });
+
+    saveState();
+    renderRecordsList();
+    updateStatistics();
+    
+    // Aktualizovat legendu, pokud je zobrazený projekt ten, do kterého se přidávalo
+    if (document.getElementById('projectSelect').value === projectId) {
+        renderProjectLegend(projectId);
+    }
+
+    closeModal('manualTaskModal');
+    showToast(`Ručně přidáno ${entriesAdded} stolů`, 'success');
+}
+
+// --- KONEC NOVÝCH FUNKCÍ ---
+
+
 // RECORDS
 function renderRecordsList() {
     const container = document.getElementById('recordsList');
@@ -953,12 +1089,15 @@ function renderRecordsList() {
             const projectName = project ? project.jmenoProjektu : 'Neznámý projekt';
             const date = new Date(entry.timestamp);
             
+            // Ručně zadané úkoly (bez X/Y) nelze upravovat na plánu
+            const canEdit = entry.x !== null;
+            
             return `
                 <div class="record-item">
                     <div class="record-header">
                         <span class="record-type record-type-task">Stůl</span>
                         <div class="record-actions">
-                            <button onclick="openEditTaskModal('${entry.id}')" class="record-btn" style="background: rgba(59, 130, 246, 0.2); color: var(--color-primary);">Upravit</button>
+                            ${canEdit ? `<button onclick="openEditTaskModal('${entry.id}')" class="record-btn" style="background: rgba(59, 130, 246, 0.2); color: var(--color-primary);">Upravit</button>` : ''}
                             <button onclick="deleteEntry('${entry.id}')" class="record-btn btn-danger" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
                         </div>
                     </div>
@@ -971,6 +1110,7 @@ function renderRecordsList() {
                         <div>📋 ${projectName}</div>
                         <div>💰 €${entry.reward.toFixed(2)}</div>
                         <div>📅 ${date.toLocaleDateString('cs-CZ')} ${date.toLocaleTimeString('cs-CZ')}</div>
+                        ${!canEdit ? '<div>(Ručně zadaný)</div>' : ''}
                     </div>
                 </div>
             `;
@@ -1015,7 +1155,10 @@ function deleteEntry(entryId) {
         renderRecordsList();
         
         if (projectId) {
-            renderCanvasWithPins(); // Překreslit plátno
+            // Pokud je záznam z plánu (má X/Y), překresli plátno
+            if (entry.x !== null) {
+                renderCanvasWithPins();
+            }
             renderProjectLegend(projectId); // Aktualizovat legendu
         }
 
@@ -1063,6 +1206,7 @@ function updateStatistics() {
     });
     
     entries.forEach(entry => {
+        // Zkontrolovat, zda pracovník stále existuje (nebyl smazán)
         if (workerEarnings[entry.workerId]) {
             if (entry.type === 'task') {
                 workerEarnings[entry.workerId].amount += entry.reward;
@@ -1379,3 +1523,4 @@ async function restoreData(event) {
 
 // Boot
 window.addEventListener('DOMContentLoaded', initApp);
+
