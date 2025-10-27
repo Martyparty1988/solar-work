@@ -28,8 +28,8 @@ let canvasState = {
     pdfRendered: false,
     currentPDF: null,
     currentPage: null,
-    currentPageNum: 1, // Nový stav pro stránkování
-    totalPages: 0,     // Nový stav pro stránkování
+    currentPageNum: 1, 
+    totalPages: 0,     
     baseScale: 1.0,
     touchStartDistance: 0,
     touchStartZoom: 1.0,
@@ -203,7 +203,41 @@ function loadState() {
         const parsedState = JSON.parse(savedState);
         state.projects = parsedState.projects || [];
         state.workers = parsedState.workers || [];
-        state.workEntries = parsedState.workEntries || [];
+        
+        // --- Migrace dat ---
+        // Zkontrolovat, jestli workEntries mají starou strukturu
+        if (parsedState.workEntries && parsedState.workEntries.length > 0 && parsedState.workEntries[0].workerId) {
+            console.log('Provádím migraci dat záznamů...');
+            state.workEntries = parsedState.workEntries.map(e => {
+                // Migrovat pouze 'task' záznamy, které mají 'workerId'
+                if (e.type === 'task' && e.workerId) {
+                    return {
+                        id: e.id,
+                        type: 'task',
+                        projectId: e.projectId,
+                        tableNumber: e.tableNumber,
+                        rewardPerWorker: e.reward, // Přejmenovat reward -> rewardPerWorker
+                        x: e.x,
+                        y: e.y,
+                        timestamp: e.timestamp,
+                        // Vytvořit nové pole workers
+                        workers: [{ 
+                            workerId: e.workerId, 
+                            workerCode: e.workerCode 
+                        }]
+                        // staré klíče workerId, workerCode, reward jsou automaticky zahozeny
+                    };
+                }
+                return e; // Ponechat 'hourly' záznamy beze změny
+            });
+            saveState(); // Uložit nový migrovaný stav
+            console.log('Migrace dokončena.');
+        } else {
+            // Data jsou již v nové struktuře nebo jsou prázdná
+            state.workEntries = parsedState.workEntries || [];
+        }
+        // --- Konec migrace ---
+
     }
     
     if (savedTimer) {
@@ -500,11 +534,11 @@ function deleteWorker(workerId) {
 function renderWorkersList() {
     const container = document.getElementById('workersList');
     const timerSelect = document.getElementById('timerWorker');
-    const taskSelect = document.getElementById('taskWorker');
+    // const taskSelect = document.getElementById('taskWorker'); // Nahrazeno checklistem
     const statsSelect = document.getElementById('statsWorkerFilter');
     const recordsSelect = document.getElementById('recordsWorkerFilter');
     const manualHourSelect = document.getElementById('manualHourWorker');
-    const manualTaskSelect = document.getElementById('manualTaskWorker');
+    // const manualTaskSelect = document.getElementById('manualTaskWorker'); // Nahrazeno checklistem
     
     if (state.workers.length === 0) {
         container.innerHTML = '<div class="empty-state" style="padding: 20px;">Žádní pracovníci</div>';
@@ -530,11 +564,11 @@ function renderWorkersList() {
     
     const optionsHtml = '<option value="">-- Vyberte pracovníka --</option>' + workerOptions;
     timerSelect.innerHTML = optionsHtml;
-    taskSelect.innerHTML = optionsHtml;
+    // taskSelect.innerHTML = optionsHtml; // Pryč
     statsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions;
     if (recordsSelect) { recordsSelect.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions; }
     if (manualHourSelect) { manualHourSelect.innerHTML = optionsHtml; }
-    if (manualTaskSelect) { manualTaskSelect.innerHTML = optionsHtml; }
+    // if (manualTaskSelect) { manualTaskSelect.innerHTML = optionsHtml; } // Pryč
 }
 
 // =============================================
@@ -558,7 +592,8 @@ async function loadProjectPlan() {
 
     } catch (error) {
         console.warn('PDF not found in IndexedDB:', error);
-        document.getElementById('canvasWrapper').style.display = 'none';
+        document.getElementById('canvasWrapper').style.display = 'block'; // Ponechat wrapper viditelný
+        document.getElementById('pdfCanvas').style.display = 'none'; // Skrýt plátno
         document.getElementById('noPlanMessage').style.display = 'flex'; // Zobrazit zprávu o chybějícím PDF
         document.getElementById('noPlanMessage').innerHTML = `
             <div class="empty-state-icon">🔄</div>
@@ -581,6 +616,7 @@ function updatePlanUI(projectId) {
         document.getElementById('pdfControls').style.display = 'flex';
         document.getElementById('workerBadgesContainer').style.display = 'block';
         document.getElementById('canvasWrapper').style.display = 'block'; // Zobrazit wrapper plátna
+        document.getElementById('pdfCanvas').style.display = 'block'; // Zobrazit plátno
         document.getElementById('noPlanMessage').style.display = 'none'; // Skrýt zprávu
         
         renderWorkerBadges(projectId); // Vykreslit legendu
@@ -590,7 +626,8 @@ function updatePlanUI(projectId) {
         document.getElementById('planActions').style.display = 'none';
         document.getElementById('pdfControls').style.display = 'none';
         document.getElementById('workerBadgesContainer').style.display = 'none';
-        document.getElementById('canvasWrapper').style.display = 'none'; // Skrýt wrapper plátna
+        // document.getElementById('canvasWrapper').style.display = 'none'; // Skrýt wrapper plátna
+        document.getElementById('pdfCanvas').style.display = 'none'; // Skrýt plátno
         document.getElementById('noPlanMessage').style.display = 'flex'; // Zobrazit výchozí zprávu
         document.getElementById('noPlanMessage').innerHTML = `
             <div class="empty-state-icon">📋</div>
@@ -638,7 +675,8 @@ function renderPage(pageNum) {
         const containerWidth = container.clientWidth;
         
         const viewport = page.getViewport({ scale: 1.0 });
-        const scale = containerWidth / viewport.width;
+        // Zkontrolovat, zda containerWidth není 0 (pokud je skrytý)
+        const scale = (containerWidth > 0) ? (containerWidth / viewport.width) : 1.0;
         canvasState.baseScale = scale;
         
         renderCanvasWithPins(); // Finální vykreslení
@@ -674,31 +712,40 @@ function drawPins(context) {
     const projectId = document.getElementById('projectSelect').value;
     if (!projectId) return;
     
-    // Vykreslit pouze piny pro aktuální projekt A STRÁNKU (zatím nepodporováno)
-    // TODO: Přidat 'pageNum' do 'task' záznamu
-    const entries = state.workEntries.filter(e => e.type === 'task' && e.projectId === projectId && e.x !== null && e.y !== null);
+    // Vykreslit pouze piny pro aktuální projekt A STRÁNKU
+    const entries = state.workEntries.filter(e => 
+        e.type === 'task' && 
+        e.projectId === projectId && 
+        e.x !== null && e.y !== null &&
+        (e.pageNum || 1) === canvasState.currentPageNum // Zohlednit číslo stránky (výchozí 1)
+    );
+    
     const totalScale = canvasState.baseScale * canvasState.currentZoom;
     
     entries.forEach((entry) => {
-        const worker = state.workers.find(w => w.id === entry.workerId);
-        const color = worker ? worker.color : '#94a3b8'; // Šedá jako fallback
+        // Získat barvu prvního pracovníka (nebo fallback)
+        const firstWorker = state.workers.find(w => w.id === entry.workers[0]?.workerId);
+        const color = firstWorker ? firstWorker.color : '#94a3b8';
         
+        // Získat kódy všech pracovníků
+        const codes = entry.workers.map(w => w.workerCode).join('+');
+
         const x = (entry.x * totalScale) + canvasState.panOffsetX;
         const y = (entry.y * totalScale) + canvasState.panOffsetY;
         
         context.beginPath();
         context.arc(x, y, 12, 0, 2 * Math.PI);
-        context.fillStyle = color + 'cc'; // Barva pracovníka s 80% průhledností
+        context.fillStyle = color + 'cc'; // Barva prvního pracovníka s 80% průhledností
         context.fill();
         context.strokeStyle = '#fff'; // Bílý okraj
         context.lineWidth = 2;
         context.stroke();
         
-        context.fillStyle = '#000'; // Černý text pro kód
+        context.fillStyle = '#000'; // Černý text pro kódy
         context.font = 'bold 10px sans-serif';
         context.textAlign = 'center';
         context.textBaseline = 'middle';
-        context.fillText(entry.workerCode || '?', x, y); 
+        context.fillText(codes, x, y); // Vykreslit všechny kódy
         
         context.fillStyle = '#fff'; // Bílý text pro číslo stolu
         context.font = 'bold 10px sans-serif';
@@ -716,7 +763,10 @@ function renderWorkerBadges(projectId) {
     }
     
     const projectEntries = state.workEntries.filter(e => e.type === 'task' && e.projectId === projectId);
-    const workerIds = [...new Set(projectEntries.map(e => e.workerId))];
+    
+    // Získat VŠECHNY workerId z VŠECHNYCH záznamů (včetně vnořených polí)
+    const workerIds = [...new Set(projectEntries.flatMap(e => e.workers.map(w => w.workerId)))];
+    
     const workers = workerIds.map(id => state.workers.find(w => w.id === id)).filter(Boolean); // .filter(Boolean) odstraní případné 'undefined'
     
     if (workers.length === 0) {
@@ -766,7 +816,7 @@ function updatePdfControls() {
 }
 
 
-// --- Touch Interakce (beze změny) ---
+// --- Touch Interakce ---
 function handleTouchStart(e) {
     e.preventDefault();
     canvasState.touchStartTime = Date.now();
@@ -831,7 +881,12 @@ function handleTouchEnd(e) {
         
         // Zjistit, zda bylo kliknuto na existující pin
         const projectId = document.getElementById('projectSelect').value;
-        const entries = state.workEntries.filter(en => en.type === 'task' && en.projectId === projectId && en.x !== null);
+        const entries = state.workEntries.filter(en => 
+            en.type === 'task' && 
+            en.projectId === projectId && 
+            en.x !== null &&
+            (en.pageNum || 1) === canvasState.currentPageNum
+        );
         
         // Poloměr kliknutí (např. 15px) převedený na PDF koordináty
         const clickRadius = 15 / totalScale; 
@@ -861,6 +916,30 @@ function handleTouchEnd(e) {
 // --- OSTATNÍ STRÁNKY (Záznamy, Statistiky...) ---
 // =============================================
 
+// Naplní checklist pracovníků v modálu
+function populateWorkerChecklist(containerId, selectedWorkerIds = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (state.workers.length === 0) {
+        container.innerHTML = '<div style="color: var(--color-text-secondary);">Nejprve přidejte pracovníky v Nastavení.</div>';
+        return;
+    }
+
+    container.innerHTML = state.workers.map(worker => `
+        <div class="worker-checklist-item">
+            <input type="checkbox" 
+                   id="${containerId}-${worker.id}" 
+                   value="${worker.id}"
+                   ${selectedWorkerIds.includes(worker.id) ? 'checked' : ''}>
+            <label for="${containerId}-${worker.id}">
+                <span class="worker-color-dot" style="background-color: ${worker.color || '#94a3b8'}"></span>
+                ${worker.name} (${worker.code || 'N/A'})
+            </label>
+        </div>
+    `).join('');
+}
+
 // TASK MODAL (pro piny z plánu)
 function openTaskModal(x, y) {
     if (state.workers.length === 0) {
@@ -873,6 +952,9 @@ function openTaskModal(x, y) {
     document.getElementById('taskEntryId').value = '';
     document.getElementById('taskX').value = x;
     document.getElementById('taskY').value = y;
+    
+    populateWorkerChecklist('taskWorkerChecklist'); // Naplnit checklist
+    
     openModal('taskModal');
 }
 
@@ -882,12 +964,15 @@ function openEditTaskModal(entryId) {
 
     document.getElementById('taskModalTitle').textContent = 'Upravit Stůl';
     document.getElementById('taskEntryId').value = entry.id;
-    document.getElementById('taskWorker').value = entry.workerId;
     document.getElementById('taskTableNumber').value = entry.tableNumber;
-    document.getElementById('taskReward').value = entry.reward;
+    document.getElementById('taskRewardPerWorker').value = entry.rewardPerWorker; // Použít rewardPerWorker
     
     document.getElementById('taskX').value = entry.x; 
     document.getElementById('taskY').value = entry.y;
+    
+    // Naplnit checklist a zaškrtnout existující pracovníky
+    const selectedIds = entry.workers.map(w => w.workerId);
+    populateWorkerChecklist('taskWorkerChecklist', selectedIds);
 
     openModal('taskModal');
 }
@@ -896,38 +981,53 @@ function saveTask(event) {
     event.preventDefault();
     const entryId = document.getElementById('taskEntryId').value;
     
+    // Získat vybrané pracovníky z checklistu
+    const selectedWorkers = Array.from(document.querySelectorAll('#taskWorkerChecklist input:checked'))
+                                 .map(input => input.value);
+    
+    if (selectedWorkers.length === 0) {
+        showToast('Vyberte alespoň jednoho pracovníka', 'error');
+        return;
+    }
+
+    // Sestavit pole pracovníků
+    const workersArray = selectedWorkers.map(id => {
+        const w = state.workers.find(w => w.id === id);
+        return { 
+            workerId: id, 
+            workerCode: w ? (w.code || '?') : '?' 
+        };
+    });
+
     const projectId = document.getElementById('projectSelect').value;
-    const workerId = document.getElementById('taskWorker').value;
     const tableNumber = document.getElementById('taskTableNumber').value.trim();
-    const reward = parseFloat(document.getElementById('taskReward').value);
+    const rewardPerWorker = parseFloat(document.getElementById('taskRewardPerWorker').value); // Použít rewardPerWorker
     const x = parseFloat(document.getElementById('taskX').value);
     const y = parseFloat(document.getElementById('taskY').value);
     
-    const worker = state.workers.find(w => w.id === workerId);
-    const workerCode = worker ? (worker.code || '?') : '?';
-
     if (entryId) {
+        // Úprava
         const entry = state.workEntries.find(e => e.id === entryId);
         if (entry) {
-            entry.workerId = workerId;
-            entry.workerCode = workerCode;
+            entry.workers = workersArray;
             entry.tableNumber = tableNumber;
-            entry.reward = reward;
+            entry.rewardPerWorker = rewardPerWorker;
+            // pageNum, x, y, projectId se nemění
         }
         showToast('Stůl upraven', 'success');
     } else {
+        // Nový
         const newEntry = {
             id: 'entry-' + Date.now(),
             type: 'task',
             projectId: projectId,
-            workerId: workerId,
-            workerCode: workerCode, 
             tableNumber: tableNumber,
-            reward: reward,
+            rewardPerWorker: rewardPerWorker,
             x: x,
             y: y,
-            timestamp: Date.now()
-            // TODO: Přidat 'pageNum: canvasState.currentPageNum'
+            pageNum: canvasState.currentPageNum, // Uložit číslo stránky!
+            timestamp: Date.now(),
+            workers: workersArray // Uložit pole pracovníků
         };
         state.workEntries.push(newEntry);
         showToast('Stůl přidán', 'success');
@@ -970,12 +1070,12 @@ function stopShift() {
     const totalHours = totalMs / (1000 * 60 * 60);
     
     const worker = state.workers.find(w => w.id === timerState.workerId);
-    const totalEarned = totalHours * worker.hourlyRate;
+    const totalEarned = totalHours * (worker ? worker.hourlyRate : 0);
     
     const newEntry = {
         id: 'entry-' + Date.now(),
         type: 'hourly',
-        workerId: timerState.workerId,
+        workerId: timerState.workerId, // Zde je workerId v pořádku, směna je vždy jen pro jednoho
         startTime: timerState.startTime,
         endTime: endTime,
         totalHours: totalHours,
@@ -998,6 +1098,7 @@ function stopShift() {
     
     showToast(`Směna ukončena: ${totalHours.toFixed(2)}h, €${totalEarned.toFixed(2)}`, 'success');
     renderRecordsList();
+    updateStatistics(); // Aktualizovat statistiky
 }
 
 function updateTimerDisplay() {
@@ -1066,30 +1167,36 @@ function saveManualHours(event) {
 
 function openManualTaskModal() {
     document.getElementById('manualTaskForm').reset();
-    document.getElementById('manualTaskDate').valueAsDate = new Date(); // Nastavit dnešVní datum
+    document.getElementById('manualTaskDate').valueAsDate = new Date(); // Nastavit dnešní datum
+    populateWorkerChecklist('manualTaskWorkerChecklist'); // Naplnit checklist
     openModal('manualTaskModal');
 }
 
 async function saveManualTask(event) {
     event.preventDefault();
     
-    const workerId = document.getElementById('manualTaskWorker').value;
+    // Získat vybrané pracovníky
+    const selectedWorkers = Array.from(document.querySelectorAll('#manualTaskWorkerChecklist input:checked'))
+                                 .map(input => input.value);
+
     const projectId = document.getElementById('manualTaskProject').value;
     const dateInput = document.getElementById('manualTaskDate').value;
     const tableNumbersString = document.getElementById('manualTaskTableNumbers').value;
-    const rewardPerTable = parseFloat(document.getElementById('manualTaskRewardPerTable').value);
+    const rewardPerWorker = parseFloat(document.getElementById('manualTaskRewardPerWorker').value); // Přejmenováno
 
-    if (!workerId || !projectId || !dateInput || !tableNumbersString || rewardPerTable < 0) {
-        showToast('Vyplňte všechna pole', 'error');
+    if (selectedWorkers.length === 0 || !projectId || !dateInput || !tableNumbersString || rewardPerWorker < 0) {
+        showToast('Vyplňte všechna pole (včetně pracovníků)', 'error');
         return;
     }
 
-    const worker = state.workers.find(w => w.id === workerId);
-    if (!worker) {
-        showToast('Pracovník nenalezen', 'error');
-        return;
-    }
-    const workerCode = worker ? (worker.code || '?') : '?';
+    // Sestavit pole pracovníků
+    const workersArray = selectedWorkers.map(id => {
+        const w = state.workers.find(w => w.id === id);
+        return { 
+            workerId: id, 
+            workerCode: w ? (w.code || '?') : '?' 
+        };
+    });
     
     const tableNumbers = tableNumbersString.split(',')
         .map(s => s.trim())
@@ -1109,13 +1216,13 @@ async function saveManualTask(event) {
             id: 'entry-' + Date.now() + '-' + index,
             type: 'task',
             projectId: projectId,
-            workerId: workerId,
-            workerCode: workerCode, 
             tableNumber: tableNum,
-            reward: rewardPerTable,
+            rewardPerWorker: rewardPerWorker, // Uložit odměnu na pracovníka
             x: null, // Ručně zadaný záznam nemá X
             y: null, // Ručně zadaný záznam nemá Y
-            timestamp: timestamp.getTime()
+            pageNum: 1, // Výchozí stránka 1
+            timestamp: timestamp.getTime(),
+            workers: workersArray // Uložit pole pracovníků
         };
         state.workEntries.push(newEntry);
         entriesAdded++;
@@ -1145,6 +1252,7 @@ function renderRecordsList() {
     
     let entries = state.workEntries;
 
+    // ... (Filtry data, projektu, typu zůstávají stejné) ...
     // Date filter
     if (dateFilter !== 'all') {
         const now = new Date();
@@ -1170,11 +1278,6 @@ function renderRecordsList() {
         });
     }
 
-    // Worker filter
-    if (workerFilter) {
-        entries = entries.filter(e => e.workerId === workerFilter);
-    }
-
     // Project filter
     if (projectFilter) {
         entries = entries.filter(e => e.type === 'task' && e.projectId === projectFilter);
@@ -1185,6 +1288,19 @@ function renderRecordsList() {
         entries = entries.filter(e => e.type === typeFilter);
     }
     
+    // ZMĚNA: Filtr pracovníka
+    if (workerFilter) {
+        entries = entries.filter(e => {
+            if (e.type === 'hourly') {
+                return e.workerId === workerFilter;
+            }
+            if (e.type === 'task') {
+                return e.workers.some(w => w.workerId === workerFilter);
+            }
+            return false;
+        });
+    }
+    
     entries.sort((a, b) => (b.timestamp || b.endTime) - (a.timestamp || a.endTime));
     
     if (entries.length === 0) {
@@ -1193,16 +1309,24 @@ function renderRecordsList() {
     }
     
     container.innerHTML = entries.map(entry => {
-        const worker = state.workers.find(w => w.id === entry.workerId);
-        const workerName = worker ? worker.name : 'Neznámý';
-        const workerColor = worker ? worker.color : '#94a3b8';
-        
         if (entry.type === 'task') {
             const project = state.projects.find(p => p.id === entry.projectId);
             const projectName = project ? project.jmenoProjektu : 'Neznámý projekt';
             const date = new Date(entry.timestamp);
             
-            // Ručně zadané úkoly (bez X/Y) nelze upravovat na plánu
+            // Získat jména a barvy VŠECH pracovníků
+            const workerDetails = entry.workers.map(w => {
+                const worker = state.workers.find(f => f.id === w.workerId);
+                return {
+                    name: worker ? worker.name : 'Neznámý',
+                    color: worker ? worker.color : '#94a3b8'
+                };
+            });
+
+            const workerDots = workerDetails.map(d => `<span class="worker-color-dot" style="background-color: ${d.color}"></span>`).join('');
+            const workerNames = workerDetails.map(d => d.name).join(', ');
+            
+            const totalReward = entry.rewardPerWorker * entry.workers.length;
             const canEdit = entry.x !== null;
             
             return `
@@ -1216,18 +1340,22 @@ function renderRecordsList() {
                     </div>
                     <div style="margin-bottom: 8px;"><strong>${entry.tableNumber}</strong></div>
                     <div style="font-size: 14px; color: var(--color-text-secondary);">
-                        <div class="record-item-worker-name">
-                            <span class="worker-color-dot" style="background-color: ${workerColor}"></span>
-                            👷 ${workerName} (<strong>Kód: ${entry.workerCode || 'N/A'}</strong>)
+                        <div class="record-item-worker-name" style="margin-bottom: 8px;">
+                            ${workerDots}
+                            <span style="margin-left: 4px;">${workerNames}</span>
                         </div>
                         <div>📋 ${projectName}</div>
-                        <div>💰 €${entry.reward.toFixed(2)}</div>
+                        <div>💰 €${totalReward.toFixed(2)} (${entry.workers.length}x €${entry.rewardPerWorker.toFixed(2)})</div>
                         <div>📅 ${date.toLocaleDateString('cs-CZ')} ${date.toLocaleTimeString('cs-CZ')}</div>
                         ${!canEdit ? '<div>(Ručně zadaný)</div>' : ''}
                     </div>
                 </div>
             `;
         } else {
+            // Hodinový záznam (zůstává stejný, je jen pro 1 pracovníka)
+            const worker = state.workers.find(w => w.id === entry.workerId);
+            const workerName = worker ? worker.name : 'Neznámý';
+            const workerColor = worker ? worker.color : '#94a3b8';
             const startDate = new Date(entry.startTime);
             const endDate = new Date(entry.endTime);
             
@@ -1287,8 +1415,13 @@ function updateStatistics() {
     
     let entries = state.workEntries;
     
+    // Filtry (stejné jako v renderRecordsList)
     if (workerFilter) {
-        entries = entries.filter(e => e.workerId === workerFilter);
+        entries = entries.filter(e => {
+            if (e.type === 'hourly') return e.workerId === workerFilter;
+            if (e.type === 'task') return e.workers.some(w => w.workerId === workerFilter);
+            return false;
+        });
     }
     if (projectFilter) {
         entries = entries.filter(e => e.type === 'hourly' || (e.type === 'task' && e.projectId === projectFilter));
@@ -1297,12 +1430,15 @@ function updateStatistics() {
     const taskEntries = entries.filter(e => e.type === 'task');
     const hourlyEntries = entries.filter(e => e.type === 'hourly');
     
-    const totalTaskEarnings = taskEntries.reduce((sum, e) => sum + e.reward, 0);
+    // ZMĚNA: Výpočet výdělku ze stolů
+    const totalTaskEarnings = taskEntries.reduce((sum, e) => sum + (e.rewardPerWorker * e.workers.length), 0);
     const totalHourlyEarnings = hourlyEntries.reduce((sum, e) => sum + e.totalEarned, 0);
     const totalEarnings = totalTaskEarnings + totalHourlyEarnings;
     
     const totalHours = hourlyEntries.reduce((sum, e) => sum + e.totalHours, 0);
     const totalTables = taskEntries.length;
+    
+    // ZMĚNA: Průměrná odměna (celkový výdělek ze stolů / počet stolů)
     const avgReward = totalTables > 0 ? totalTaskEarnings / totalTables : 0;
     
     document.getElementById('statTotalEarnings').textContent = `€${totalEarnings.toFixed(2)}`;
@@ -1310,20 +1446,32 @@ function updateStatistics() {
     document.getElementById('statTotalTables').textContent = totalTables;
     document.getElementById('statAvgReward').textContent = `€${avgReward.toFixed(2)}`;
     
+    // ZMĚNA: Výdělky podle pracovníků
     const workerEarnings = {};
-    // Použít jen pracovníky, kteří mají záznamy ve filtrech
-    const relevantWorkers = state.workers.filter(w => entries.some(e => e.workerId === w.id));
+    
+    // Získat všechny relevantní pracovníky
+    const relevantWorkerIds = new Set();
+    entries.forEach(e => {
+        if (e.type === 'hourly') relevantWorkerIds.add(e.workerId);
+        if (e.type === 'task') e.workers.forEach(w => relevantWorkerIds.add(w.workerId));
+    });
 
-    relevantWorkers.forEach(w => { 
-        workerEarnings[w.id] = { name: w.name, color: w.color, amount: 0 }; 
+    state.workers.forEach(w => { 
+        if (relevantWorkerIds.has(w.id)) {
+            workerEarnings[w.id] = { name: w.name, color: w.color, amount: 0 }; 
+        }
     });
     
+    // Rozpočítat odměny
     entries.forEach(entry => {
-        // Zkontrolovat, zda pracovník stále existuje (nebyl smazán)
-        if (workerEarnings[entry.workerId]) {
-            if (entry.type === 'task') {
-                workerEarnings[entry.workerId].amount += entry.reward;
-            } else {
+        if (entry.type === 'task') {
+            entry.workers.forEach(w => {
+                if (workerEarnings[w.workerId]) {
+                    workerEarnings[w.workerId].amount += entry.rewardPerWorker; // Každý dostane svou část
+                }
+            });
+        } else if (entry.type === 'hourly') {
+            if (workerEarnings[entry.workerId]) {
                 workerEarnings[entry.workerId].amount += entry.totalEarned;
             }
         }
@@ -1332,6 +1480,7 @@ function updateStatistics() {
     const workerChart = document.getElementById('workerEarningsChart');
     const workerEntries = Object.values(workerEarnings).filter(data => data.amount > 0);
     
+    // Zbytek statistik (vykreslení grafů) je již správně nastaven z minula
     if (workerEntries.length > 0) {
         workerChart.innerHTML = workerEntries
             .sort((a, b) => b.amount - a.amount)
@@ -1413,28 +1562,45 @@ function generateDailyReport() {
 
 `;
     
+    // ZMĚNA: Logika pro report
     const workerGroups = {};
     entries.forEach(entry => {
-        const worker = state.workers.find(w => w.id === entry.workerId);
-        const workerName = worker ? worker.name : 'Neznámý';
-        
-        if (!workerGroups[workerName]) {
-            workerGroups[workerName] = { tasks: [], hourly: [], worker: worker };
-        }
-        
         if (entry.type === 'task') {
-            workerGroups[workerName].tasks.push(entry);
-        } else {
+            // Přiřadit odměnu každému pracovníkovi
+            entry.workers.forEach(w => {
+                const worker = state.workers.find(f => f.id === w.workerId);
+                const workerName = worker ? worker.name : 'Neznámý';
+                
+                if (!workerGroups[workerName]) {
+                    workerGroups[workerName] = { tasks: [], hourly: [], worker: worker };
+                }
+                // Přidat záznam o stolu, ale s individuální odměnou
+                workerGroups[workerName].tasks.push({
+                    tableNumber: entry.tableNumber,
+                    reward: entry.rewardPerWorker, // Zde je individuální odměna
+                    projectId: entry.projectId
+                });
+            });
+        } else if (entry.type === 'hourly') {
+            // Hodinový záznam je stále jen pro 1 pracovníka
+            const worker = state.workers.find(w => w.id === entry.workerId);
+            const workerName = worker ? worker.name : 'Neznámý';
+            if (!workerGroups[workerName]) {
+                workerGroups[workerName] = { tasks: [], hourly: [], worker: worker };
+            }
             workerGroups[workerName].hourly.push(entry);
         }
     });
     
+    let grandTotal = 0; // Celkový součet budeme počítat zde
+
     Object.entries(workerGroups).forEach(([workerName, data]) => {
         const workerCode = data.worker ? (data.worker.code || 'N/A') : 'N/A';
         report += `PRACOVNÍK: ${workerName} (Kód: ${workerCode})
 --------------------------------------------------
 `;
         
+        let taskTotal = 0;
         if (data.tasks.length > 0) {
             report += `
 Hotové Stoly:
@@ -1443,12 +1609,13 @@ Hotové Stoly:
                 const project = state.projects.find(p => p.id === task.projectId);
                 report += `  • ${task.tableNumber} - €${task.reward.toFixed(2)} (${project ? project.jmenoProjektu : 'N/A'})
 `;
+                taskTotal += task.reward;
             });
-            const taskTotal = data.tasks.reduce((sum, t) => sum + t.reward, 0);
             report += `  Celkem ze stolů: €${taskTotal.toFixed(2)}
 `;
         }
         
+        let hourlyTotal = 0;
         if (data.hourly.length > 0) {
             report += `
 Odpracované Hodiny:
@@ -1456,24 +1623,19 @@ Odpracované Hodiny:
             data.hourly.forEach(h => {
                 report += `  • ${h.totalHours.toFixed(2)}h - €${h.totalEarned.toFixed(2)}
 `;
+                hourlyTotal += h.totalEarned;
             });
-            const hourlyTotal = data.hourly.reduce((sum, h) => sum + h.totalEarned, 0);
             report += `  Celkem z hodin: €${hourlyTotal.toFixed(2)}
 `;
         }
         
-        const workerTotal = 
-            data.tasks.reduce((sum, t) => sum + t.reward, 0) +
-            data.hourly.reduce((sum, h) => sum + h.totalEarned, 0);
+        const workerTotal = taskTotal + hourlyTotal;
+        grandTotal += workerTotal;
         report += `
   CELKEM: €${workerTotal.toFixed(2)}
 
 `;
     });
-    
-    const grandTotal = entries.reduce((sum, e) => {
-        return sum + (e.type === 'task' ? e.reward : e.totalEarned);
-    }, 0);
     
     report += `==================================================
 CELKOVÝ SOUČET: €${grandTotal.toFixed(2)}
