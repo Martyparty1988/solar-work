@@ -804,3 +804,56 @@ select.form-control {
     height: 14px;
 }
 
+/* ======================================= */
+/* --- NOVÉ: Optimalizace pro Landscape --- */
+/* ======================================= */
+
+@media (orientation: landscape) and (max-height: 500px) {
+    /* Snížit padding na hlavní stránce v landscape */
+    .pages-container {
+        padding: 16px;
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    }
+
+    /* Zvětšit výšku PDF preview na úkor vertikálního místa */
+    .pdf-preview {
+        height: calc(100vh - 320px); /* Méně odečítání, aby bylo plátno větší */
+        max-height: 75vh;
+    }
+
+    .plan-card {
+        padding: 16px; /* Snížit padding karty */
+        gap: 16px;
+    }
+
+    .plan-header {
+        flex-direction: row; /* Vynutit řádek i na menších landscape */
+        align-items: center;
+    }
+
+    .plan-title {
+        font-size: 1.5rem; /* Zmenšit písmo titulku */
+    }
+
+    .plan-actions button {
+        font-size: 12px;
+        padding: 0.5em 1em;
+    }
+
+    /* Snížit padding modálů, aby se vešly */
+    .modal-content {
+        max-height: 95vh;
+        padding: 16px;
+    }
+
+    /* Zajistit, aby byl checklist v modálu scrollovatelný */
+    .worker-checklist {
+        max-height: 150px;
+    }
+
+    .timer-display {
+        font-size: 36px;
+        margin: 16px 0;
+    }
+}
+
