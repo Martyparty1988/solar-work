@@ -1,0 +1,84 @@
+/* SOLAR WORK v4.1 - AI CONTROL STYLES */
+
+.ai-control-panel {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    border: 2px solid #3b82f6;
+    border-radius: 12px;
+    padding: 16px;
+    width: 300px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    animation: aiPanelSlideIn 0.3s ease-out;
+}
+
+.ai-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 12px;
+}
+
+.ai-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(34, 197, 94, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: statusPulse 2s infinite;
+}
+
+body[data-ai-mode="true"] {
+    --ai-highlight-color: #3b82f6;
+}
+
+body[data-ai-mode="true"] .action-btn:hover {
+    box-shadow: 0 0 0 2px var(--ai-highlight-color);
+    transition: all 0.2s ease;
+}
+
+@keyframes aiPanelSlideIn {
+    from { opacity: 0; transform: translateX(100%); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+#ai-mode-toggle {
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    border: none;
+    color: white;
+    font-weight: 600;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+#ai-mode-toggle:hover {
+    transform: scale(1.05);
+}
+
+.ai-control-mode #ai-mode-toggle {
+    background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+}
+
+body[data-ai-mode="true"] *:focus {
+    outline: 2px solid var(--ai-highlight-color) !important;
+    outline-offset: 2px;
+}
