@@ -1,695 +1,12 @@
 // =============================================
-// SOLAR WORK v4.1 - COMPLETE + AI CONTROL
+// SOLAR WORK v4.1 - ZBYLÉ FUNKCE
 // =============================================
-
-// PDF.js Worker Configuration
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-
-// Paleta barev pro pracovníky
-const WORKER_COLORS = [
-    '#ef4444', '#f97316', '#22c55e', '#3b82f6', 
-    '#a855f7', '#ec4899', '#22d3ee', '#a3e635'
-];
-
-// State Management - ROZŠÍŘENO v4.1
-let state = {
-    projects: [], 
-    workers: [], 
-    workEntries: [],
-    templates: [], 
-    settings: {
-        theme: 'dark',
-        autoBackup: false,
-        notifications: true
-    }
-};
-
-// Canvas State - ROZŠÍŘENO v4.1
-let canvasState = {
-    currentZoom: 1.0,
-    panOffsetX: 0,
-    panOffsetY: 0,
-    pdfRendered: false,
-    currentPDF: null,
-    currentPage: null,
-    currentPageNum: 1, 
-    totalPages: 0,     
-    baseScale: 1.0,
-    touchStartDistance: 0,
-    touchStartZoom: 1.0,
-    lastTouchX: 0,
-    lastTouchY: 0,
-    isDragging: false,
-    touchStartTime: 0,
-    touchMoved: false,
-    selectedPins: [],
-    draggedPin: null,
-    dragStartX: 0,
-    dragStartY: 0,
-    isEditMode: false,
-    history: [],
-    historyIndex: -1
-};
-
-// Timer State - ROZŠÍŘENO v4.1
-let timerState = {
-    isRunning: false,
-    startTime: null,
-    workerId: null,
-    intervalId: null,
-    breakStartTime: null,
-    totalBreakTime: 0
-};
-
-// IndexedDB variables
-const DB_NAME = 'SolarWorkDB_v2';
-const STORE_NAME = 'pdfStore';
-let db;
-
-// IndexedDB helpers
-function initDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 2);
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-            }
-        };
-        request.onsuccess = (event) => {
-            db = event.target.result;
-            resolve(db);
-        };
-        request.onerror = (event) => reject(event.target.error);
-    });
-}
-
-function savePDF(id, pdfBlob) {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject('DB not initialized');
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.put({ id: id, pdf: pdfBlob });
-        request.onsuccess = () => resolve();
-        request.onerror = (event) => reject(event.target.error);
-    });
-}
-
-function loadPDF(id) {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject('DB not initialized');
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(id);
-        request.onsuccess = (event) => {
-            if (event.target.result) {
-                resolve(event.target.result.pdf);
-            } else {
-                reject('No PDF found for this ID');
-            }
-        };
-        request.onerror = (event) => reject(event.target.error);
-    });
-}
-
-function deletePDF(id) {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject('DB not initialized');
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.delete(id);
-        request.onsuccess = () => resolve();
-        request.onerror = (event) => reject(event.target.error);
-    });
-}
-
-function getAllPDFs() {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject('DB not initialized');
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.getAll();
-        request.onsuccess = (event) => resolve(event.target.result);
-        request.onerror = (event) => reject(event.target.error);
-    });
-}
-
-function clearPDFStore() {
-    return new Promise((resolve, reject) => {
-        if (!db) return reject('DB not initialized');
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.clear();
-        request.onsuccess = () => resolve();
-        request.onerror = (event) => reject(event.target.error);
-    });
-}
+// Přidat za app.js nebo vložit do app.js
 
 // =============================================
-// AI OVLÁDÁNÍ API
-// =============================================
-
-window.SolarWorkAPI = {
-    version: '4.1.0',
-    aiMode: false,
-    
-    async addWorker(name, code, hourlyRate, color = null) {
-        try {
-            const worker = {
-                id: 'worker-' + Date.now(),
-                name: name.trim(),
-                code: code.trim(),
-                hourlyRate: parseFloat(hourlyRate),
-                color: color || WORKER_COLORS[state.workers.length % WORKER_COLORS.length]
-            };
-            
-            state.workers.push(worker);
-            saveState();
-            renderWorkersList();
-            
-            return { success: true, workerId: worker.id, data: worker };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    },
-    
-    async startShift(workerId) {
-        try {
-            if (timerState.isRunning) throw new Error('Směna již běží');
-            
-            const worker = state.workers.find(w => w.id === workerId);
-            if (!worker) throw new Error(`Pracovník nenalezen: ${workerId}`);
-            
-            timerState.isRunning = true;
-            timerState.startTime = Date.now();
-            timerState.workerId = workerId;
-            timerState.intervalId = setInterval(updateTimerDisplay, 1000);
-            
-            document.getElementById('startShift').style.display = 'none';
-            document.getElementById('stopShift').style.display = 'block';
-            document.getElementById('timerWorker').value = workerId;
-            document.getElementById('timerWorker').disabled = true;
-            
-            saveState();
-            showToast(`Směna zahájena pro ${worker.name}`, 'success');
-            
-            return { success: true, workerId, workerName: worker.name, startTime: timerState.startTime };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    },
-    
-    async stopShift() {
-        try {
-            if (!timerState.isRunning) throw new Error('Žádná směna neběží');
-            
-            const endTime = Date.now();
-            const totalMs = endTime - timerState.startTime;
-            const totalHours = totalMs / (1000 * 60 * 60);
-            
-            const worker = state.workers.find(w => w.id === timerState.workerId);
-            const totalEarned = totalHours * (worker ? worker.hourlyRate : 0);
-            
-            const newEntry = {
-                id: 'entry-' + Date.now(),
-                type: 'hourly',
-                workerId: timerState.workerId,
-                startTime: timerState.startTime,
-                endTime: endTime,
-                totalHours: totalHours,
-                totalEarned: totalEarned
-            };
-            
-            state.workEntries.push(newEntry);
-            
-            clearInterval(timerState.intervalId);
-            timerState.isRunning = false;
-            timerState.startTime = null;
-            timerState.workerId = null;
-            
-            document.getElementById('startShift').style.display = 'block';
-            document.getElementById('stopShift').style.display = 'none';
-            document.getElementById('timerWorker').disabled = false;
-            document.getElementById('timerDisplay').textContent = '00:00:00';
-            
-            saveState();
-            renderRecordsList();
-            updateStatistics();
-            
-            return { success: true, data: newEntry };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    },
-    
-    getWorkers: () => state.workers,
-    getProjects: () => state.projects,
-    getWorkEntries: () => state.workEntries,
-    
-    // AI Mode
-    enableAIMode() {
-        this.aiMode = true;
-        document.body.setAttribute('data-ai-mode', 'true');
-        document.body.classList.add('ai-control-mode');
-        this.showAIPanel();
-        return { success: true, message: 'AI režim aktivován' };
-    },
-    
-    disableAIMode() {
-        this.aiMode = false;
-        document.body.removeAttribute('data-ai-mode');
-        document.body.classList.remove('ai-control-mode');
-        this.hideAIPanel();
-        return { success: true, message: 'AI režim deaktivován' };
-    },
-    
-    showAIPanel() {
-        let aiPanel = document.getElementById('ai-control-panel');
-        if (!aiPanel) {
-            aiPanel = this.createAIPanel();
-        }
-        aiPanel.style.display = 'block';
-    },
-    
-    hideAIPanel() {
-        const aiPanel = document.getElementById('ai-control-panel');
-        if (aiPanel) aiPanel.style.display = 'none';
-    },
-    
-    createAIPanel() {
-        const panel = document.createElement('div');
-        panel.id = 'ai-control-panel';
-        panel.className = 'ai-control-panel';
-        panel.innerHTML = `
-            <div class="ai-panel-header">
-                <h3>🤖 AI Ovládání</h3>
-                <button onclick="SolarWorkAPI.disableAIMode()" class="btn btn-secondary btn-sm">Zavřít</button>
-            </div>
-            <div class="ai-panel-content">
-                <div class="ai-status">
-                    <div class="status-indicator active"></div>
-                    <span>AI režim aktivní</span>
-                </div>
-                <div class="ai-commands">
-                    <h4>Dostupné příkazy:</h4>
-                    <ul>
-                        <li><code>addWorker(name, code, rate)</code></li>
-                        <li><code>startShift(workerId)</code></li>
-                        <li><code>stopShift()</code></li>
-                        <li><code>getWorkers()</code></li>
-                    </ul>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(panel);
-        return panel;
-    }
-};
-
-// Aliasy pro zpětnou kompatibilitu
-window.startShift = (workerId) => SolarWorkAPI.startShift(workerId);
-window.stopShift = () => SolarWorkAPI.stopShift();
-window.addWorker = (name, code, rate, color) => SolarWorkAPI.addWorker(name, code, rate, color);
-window.getWorkers = () => SolarWorkAPI.getWorkers();
-
-// Initialize App
-async function initApp() {
-    try {
-        await initDB();
-    } catch (error) {
-        console.error('Failed to init DB', error);
-        showToast('Chyba databáze, PDF nebudou uložena', 'error');
-    }
-
-    loadState();
-    setupEventListeners();
-    
-    document.getElementById('backupButton')?.addEventListener('click', backupData);
-    document.getElementById('restoreButton')?.addEventListener('click', triggerRestore);
-    document.getElementById('restoreFileInput')?.addEventListener('change', restoreData);
-    document.getElementById('exportCSV')?.addEventListener('click', exportToCSV);
-
-    renderProjectsDropdown();
-    renderWorkersList();
-    renderProjectsList();
-    renderRecordsList();
-    updateStatistics();
-    
-    const reportDate = document.getElementById('reportDate');
-    if (reportDate) reportDate.valueAsDate = new Date();
-    
-    if (timerState.isRunning && timerState.startTime) {
-        document.getElementById('startShift').style.display = 'none';
-        document.getElementById('stopShift').style.display = 'block';
-        document.getElementById('timerWorker').disabled = true;
-        document.getElementById('timerWorker').value = timerState.workerId;
-        timerState.intervalId = setInterval(updateTimerDisplay, 1000);
-        showToast('Běžící směna obnovena', 'info');
-    }
-    
-    if (state.projects.length === 0) {
-        navigateTo('settings');
-    }
-    
-    updatePlanUI(null);
-
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./service-worker.js')
-            .catch(err => console.log('SW registration failed:', err));
-    }
-    
-    console.log('🤖 Solar Work AI API v4.1 ready at window.SolarWorkAPI');
-}
-
-// State Management
-function loadState() {
-    const savedState = localStorage.getItem('solarWorkState_v4');
-    const savedTimer = localStorage.getItem('solarWorkTimer_v4');
-
-    if (savedState) {
-        const parsedState = JSON.parse(savedState);
-        state.projects = parsedState.projects || [];
-        state.workers = parsedState.workers || [];
-        state.templates = parsedState.templates || [];
-        state.settings = parsedState.settings || { theme: 'dark', autoBackup: false, notifications: true };
-        
-        if (parsedState.workEntries && parsedState.workEntries.length > 0) {
-            state.workEntries = parsedState.workEntries.map(e => {
-                if (e.type === 'task') {
-                    // OPRAVA: Zajistit workers pole
-                    if (!e.workers && e.workerId) {
-                        e.workers = [{ workerId: e.workerId, workerCode: e.workerCode || '?' }];
-                    }
-                    if (!e.workers || e.workers.length === 0) {
-                        e.workers = [{ workerId: 'unknown', workerCode: '?' }];
-                    }
-                    // OPRAVA: Zajistit rewardPerWorker
-                    if (e.rewardPerWorker === undefined) {
-                        e.rewardPerWorker = e.reward || 0;
-                    }
-                }
-                return e;
-            });
-        } else {
-            state.workEntries = [];
-        }
-    } else {
-        // Migrace z v3
-        const oldState = localStorage.getItem('solarWorkState_v3');
-        if (oldState) {
-            const parsed = JSON.parse(oldState);
-            state.projects = parsed.projects || [];
-            state.workers = parsed.workers || [];
-            state.workEntries = (parsed.workEntries || []).map(e => {
-                if (e.type === 'task' && e.workerId && !e.workers) {
-                    return {
-                        ...e,
-                        rewardPerWorker: e.reward || 0,
-                        workers: [{ workerId: e.workerId, workerCode: e.workerCode || '?' }]
-                    };
-                }
-                return e;
-            });
-            saveState();
-            showToast('Data migrována z v3 na v4.1', 'success');
-        }
-    }
-    
-    if (savedTimer) {
-        timerState = JSON.parse(savedTimer);
-        timerState.intervalId = null;
-    }
-}
-
-function saveState() {
-    const stateToSave = {
-        projects: state.projects,  
-        workers: state.workers,
-        workEntries: state.workEntries,
-        templates: state.templates,
-        settings: state.settings
-    };
-
-    localStorage.setItem('solarWorkState_v4', JSON.stringify(stateToSave));
-    localStorage.setItem('solarWorkTimer_v4', JSON.stringify(timerState));
-}
-
-// Navigation
-function navigateTo(pageName) {
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const targetPage = document.getElementById(`page-${pageName}`);
-    if (targetPage) targetPage.classList.add('active');
-    
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.toggle('active', item.dataset.page === pageName);
-    });
-    
-    if (pageName === 'records') {
-        renderRecordsList();
-        renderWorkersList();
-        renderProjectsDropdown();
-    } else if (pageName === 'statistics') {
-        updateStatistics();
-    } else if (pageName === 'plan') {
-        const projectId = document.getElementById('projectSelect')?.value;
-        if (projectId) renderWorkerBadges(projectId);
-    }
-}
-
-// Event Listeners
-function setupEventListeners() {
-    const projectSelect = document.getElementById('projectSelect');
-    if (projectSelect) projectSelect.addEventListener('change', loadProjectPlan);
-    
-    const canvas = document.getElementById('pdfCanvas');
-    if (canvas) {
-        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-    }
-    
-    // Timer
-    const startBtn = document.getElementById('startShift');
-    const stopBtn = document.getElementById('stopShift');
-    if (startBtn) startBtn.addEventListener('click', startShift);
-    if (stopBtn) stopBtn.addEventListener('click', stopShift);
-    
-    // PDF Controls
-    const resetBtn = document.getElementById('resetZoom');
-    const zoomInBtn = document.getElementById('zoomIn');
-    const zoomOutBtn = document.getElementById('zoomOut');
-    const prevBtn = document.getElementById('prevPage');
-    const nextBtn = document.getElementById('nextPage');
-    
-    if (resetBtn) resetBtn.addEventListener('click', resetZoom);
-    if (zoomInBtn) zoomInBtn.addEventListener('click', () => changeZoom(0.2));
-    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => changeZoom(-0.2));
-    if (prevBtn) prevBtn.addEventListener('click', () => changePage(-1));
-    if (nextBtn) nextBtn.addEventListener('click', () => changePage(1));
-    
-    // Filters
-    const filterIds = ['recordsFilter', 'recordsWorkerFilter', 'recordsProjectFilter', 'recordsDateFilter', 'statsWorkerFilter', 'statsProjectFilter'];
-    filterIds.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.addEventListener('change', id.startsWith('stats') ? updateStatistics : renderRecordsList);
-        }
-    });
-}
-
-// Utility Functions
-function vibrate(duration = 50) {
-    if ('vibrate' in navigator) {
-        try {
-            navigator.vibrate(duration);
-        } catch (e) {
-            console.warn('Vibration failed', e);
-        }
-    }
-}
-
-function showToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
-    if (!toast) return;
-    
-    toast.textContent = message;
-    toast.className = `toast toast-${type} show`;
-    
-    if (type === 'success') vibrate(50);
-    else if (type === 'error') vibrate([100, 30, 100]);
-    
-    setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-function showLoader() { 
-    const loader = document.getElementById('loader');
-    if (loader) loader.classList.add('show'); 
-}
-
-function hideLoader() { 
-    const loader = document.getElementById('loader');
-    if (loader) loader.classList.remove('show'); 
-}
-
-function openModal(modalId) { 
-    const modal = document.getElementById(modalId);
-    if (modal) modal.classList.add('active'); 
-}
-
-function closeModal(modalId) { 
-    const modal = document.getElementById(modalId);
-    if (modal) modal.classList.remove('active'); 
-}
-
-// PROJECTS
-function openProjectModal(projectId = null) {
-    if (projectId) {
-        const project = state.projects.find(p => p.id === projectId);
-        if (!project) return;
-        
-        document.getElementById('projectModalTitle').textContent = 'Upravit Projekt';
-        document.getElementById('projectId').value = project.id;
-        document.getElementById('projectName').value = project.jmenoProjektu;
-        document.getElementById('currentPDF').textContent = 'Pro změnu nahrajte nové PDF (původní bude přepsáno)';
-        document.getElementById('projectPDF').required = false;
-    } else {
-        document.getElementById('projectModalTitle').textContent = 'Přidat Nový Projekt';
-        document.getElementById('projectForm').reset();
-        document.getElementById('currentPDF').textContent = '';
-        document.getElementById('projectPDF').required = true;
-    }
-    openModal('projectModal');
-}
-
-async function saveProject(event) {
-    event.preventDefault();
-    const projectId = document.getElementById('projectId').value;
-    const projectName = document.getElementById('projectName').value.trim();
-    const pdfFile = document.getElementById('projectPDF').files[0];
-
-    const projectIdToSave = projectId || 'proj-' + Date.now();
-
-    if (pdfFile) {
-        showLoader();
-        try {
-            await savePDF(projectIdToSave, pdfFile);
-            
-            if (projectId) {
-                const project = state.projects.find(p => p.id === projectId);
-                if (project) project.jmenoProjektu = projectName;
-            } else {
-                state.projects.push({ id: projectIdToSave, jmenoProjektu: projectName });
-            }
-            
-            saveState();
-            renderProjectsList();
-            renderProjectsDropdown();
-            
-            if (document.getElementById('projectSelect')?.value === projectIdToSave) {
-                updatePlanUI(projectIdToSave);
-            }
-            closeModal('projectModal');
-            hideLoader();
-            showToast('Projekt a PDF uloženy', 'success');
-
-        } catch (error) {
-            console.error('Failed to save PDF:', error);
-            showToast('Chyba při ukládání PDF', 'error');
-            hideLoader();
-        }
-    } else if (projectId) {
-        const project = state.projects.find(p => p.id === projectId);
-        if (project) {
-            project.jmenoProjektu = projectName;
-            saveState();
-            renderProjectsList();
-            renderProjectsDropdown();
-            closeModal('projectModal');
-            showToast('Projekt aktualizován', 'success');
-        }
-    } else {
-        showToast('Prosím, vyberte PDF soubor', 'error');
-    }
-}
-
-async function deleteProject(projectId) {
-    if (confirm('Opravdu chcete smazat tento projekt? Smažou se i všechny související záznamy a PDF.')) {
-        const isDeletingActive = (document.getElementById('projectSelect')?.value === projectId);
-
-        state.projects = state.projects.filter(p => p.id !== projectId);
-        state.workEntries = state.workEntries.filter(e => e.projectId !== projectId);
-        
-        try { 
-            await deletePDF(projectId); 
-        } catch (error) { 
-            console.warn('Could not delete PDF from DB:', error); 
-        }
-        
-        saveState();
-        renderProjectsList();
-        renderProjectsDropdown();
-        
-        if (isDeletingActive) {
-            const projectSelect = document.getElementById('projectSelect');
-            if (projectSelect) projectSelect.value = "";
-            updatePlanUI(null);
-        }
-        
-        showToast('Projekt smazán', 'success');
-    }
-}
-
-function renderProjectsList() {
-    const container = document.getElementById('projectsList');
-    if (!container) return;
-    
-    if (state.projects.length === 0) {
-        container.innerHTML = '<div class="empty-state" style="padding: 20px;">Žádné projekty</div>';
-        return;
-    }
-    
-    container.innerHTML = state.projects.map(project => `
-        <div class="list-item">
-            <div class="list-item-info">
-                <div class="list-item-title">${project.jmenoProjektu}</div>
-                <div class="list-item-subtitle">ID: ${project.id.substring(5, 13)}</div>
-            </div>
-            <div class="flex gap-8">
-                <button onclick="openProjectModal('${project.id}')" class="record-btn" style="background: rgba(59, 130, 246, 0.2); color: var(--color-primary);">Upravit</button>
-                <button onclick="deleteProject('${project.id}')" class="record-btn" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function renderProjectsDropdown() {
-    const selects = [
-        document.getElementById('projectSelect'),
-        document.getElementById('statsProjectFilter'),
-        document.getElementById('recordsProjectFilter'),
-        document.getElementById('manualTaskProject')
-    ].filter(Boolean);
-    
-    const options = state.projects.map(p => `<option value="${p.id}">${p.jmenoProjektu}</option>`).join('');
-    
-    selects.forEach(select => {
-        if (select.id === 'projectSelect' || select.id === 'manualTaskProject') {
-            select.innerHTML = '<option value="">-- Vyberte projekt --</option>' + options;
-        } else {
-            select.innerHTML = '<option value="">Všechny projekty</option>' + options;
-        }
-    });
-}
-
-// Boot app
-window.addEventListener('DOMContentLoaded', initApp);
-
-// =============================================
-// VŠECHNY ZBYLÉ FUNKCE - PŘIDAT NA KONEC
-// =============================================
-
 // WORKERS MANAGEMENT
+// =============================================
+
 function openWorkerModal(workerId = null) {
     if (workerId) {
         const worker = state.workers.find(w => w.id === workerId);
@@ -751,12 +68,12 @@ function renderWorkersList() {
     const container = document.getElementById('workersList');
     if (!container) return;
     
-    const selectors = [
-        document.getElementById('timerWorker'),
-        document.getElementById('statsWorkerFilter'),
-        document.getElementById('recordsWorkerFilter'),
-        document.getElementById('manualHourWorker')
-    ].filter(Boolean);
+    const selectors = {
+        timer: document.getElementById('timerWorker'),
+        stats: document.getElementById('statsWorkerFilter'),
+        records: document.getElementById('recordsWorkerFilter'),
+        manualHour: document.getElementById('manualHourWorker')
+    };
     
     if (state.workers.length === 0) {
         container.innerHTML = '<div class="empty-state">Žádní pracovníci</div>';
@@ -771,27 +88,50 @@ function renderWorkersList() {
                     <div class="list-item-subtitle">Kód: <strong>${worker.code || 'N/A'}</strong> | €${worker.hourlyRate.toFixed(2)}/hod</div>
                 </div>
                 <div class="flex gap-8">
-                    <button onclick="openWorkerModal('${worker.id}')" class="record-btn" style="background: rgba(59, 130, 246, 0.2); color: var(--color-primary);">Upravit</button>
-                    <button onclick="deleteWorker('${worker.id}')" class="record-btn" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
+                    <button onclick="openWorkerModal('${worker.id}')" 
+                            id="edit-worker-${worker.id}" 
+                            class="action-btn record-btn" 
+                            data-action="edit-worker" 
+                            data-worker-id="${worker.id}"
+                            aria-label="Upravit pracovníka ${worker.name}"
+                            style="background: rgba(59, 130, 246, 0.2); color: var(--color-primary);">
+                        Upravit
+                    </button>
+                    <button onclick="deleteWorker('${worker.id}')" 
+                            id="delete-worker-${worker.id}" 
+                            class="action-btn record-btn btn-danger" 
+                            data-action="delete-worker" 
+                            data-worker-id="${worker.id}"
+                            aria-label="Smazat pracovníka ${worker.name}"
+                            style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">
+                        Smazat
+                    </button>
                 </div>
             </div>
         `).join('');
     }
     
     const workerOptions = state.workers.map(w => 
-        `<option value="${w.id}">${w.name} (${w.code || 'N/A'})</option>`
+        `<option value="${w.id}" data-worker-name="${w.name}" data-worker-code="${w.code || 'N/A'}">${w.name} (${w.code || 'N/A'})</option>`
     ).join('');
     
-    selectors.forEach(select => {
-        if (select.id === 'statsWorkerFilter' || select.id === 'recordsWorkerFilter') {
-            select.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions;
-        } else {
-            select.innerHTML = '<option value="">-- Vyberte pracovníka --</option>' + workerOptions;
+    const optionsHtml = '<option value="">-- Vyberte pracovníka --</option>' + workerOptions;
+    
+    Object.values(selectors).forEach(select => {
+        if (select) {
+            if (select.id === 'statsWorkerFilter' || select.id === 'recordsWorkerFilter') {
+                select.innerHTML = '<option value="">Všichni pracovníci</option>' + workerOptions;
+            } else {
+                select.innerHTML = optionsHtml;
+            }
         }
     });
 }
 
-// PLAN FUNCTIONS
+// =============================================
+// PLAN MANAGEMENT
+// =============================================
+
 async function loadProjectPlan() {
     const projectId = document.getElementById('projectSelect').value;
     updatePlanUI(projectId);
@@ -820,6 +160,7 @@ async function loadProjectPlan() {
                 <button onclick="openProjectModal('${projectId}')" class="btn btn-primary mt-16">Nahrát PDF</button>
             `;
         }
+        
         showToast('Prosím, nahrajte PDF pro tento projekt', 'info');
         hideLoader();
     }
@@ -991,14 +332,19 @@ function renderWorkerBadges(projectId) {
     }
     
     container.innerHTML = workers.map(w => `
-        <div class="worker-badge" data-worker-id="${w.id}" style="background: ${w.color || '#94a3b8'}33; border: 1px solid ${w.color || '#94a3b8'}88;">
+        <div class="worker-badge" 
+             data-worker-id="${w.id}"
+             style="background: ${w.color || '#94a3b8'}33; border: 1px solid ${w.color || '#94a3b8'}88;">
             <span class="worker-color-dot" style="background-color: ${w.color || '#94a3b8'}"></span>
             ${w.name} (${w.code || 'N/A'})
         </div>
     `).join('');
 }
 
+// =============================================
 // PDF CONTROLS
+// =============================================
+
 function resetZoom() {
     canvasState.currentZoom = 1.0;
     canvasState.panOffsetX = 0;
@@ -1031,7 +377,10 @@ function updatePdfControls() {
     if (nextBtn) nextBtn.disabled = canvasState.currentPageNum >= canvasState.totalPages;
 }
 
+// =============================================
 // TOUCH HANDLING
+// =============================================
+
 function handleTouchStart(e) {
     e.preventDefault();
     canvasState.touchStartTime = Date.now();
@@ -1123,7 +472,10 @@ function handleTouchEnd(e) {
     canvasState.isDragging = false;
 }
 
+// =============================================
 // TASK MANAGEMENT
+// =============================================
+
 function populateWorkerChecklist(containerId, selectedWorkerIds = []) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -1138,6 +490,9 @@ function populateWorkerChecklist(containerId, selectedWorkerIds = []) {
             <input type="checkbox" 
                    id="${containerId}-${worker.id}" 
                    value="${worker.id}"
+                   data-worker-name="${worker.name}"
+                   data-worker-code="${worker.code || 'N/A'}"
+                   aria-label="Vybrat pracovníka ${worker.name}"
                    ${selectedWorkerIds.includes(worker.id) ? 'checked' : ''}>
             <label for="${containerId}-${worker.id}">
                 <span class="worker-color-dot" style="background-color: ${worker.color || '#94a3b8'}"></span>
@@ -1194,7 +549,10 @@ function saveTask(event) {
 
     const workersArray = selectedWorkers.map(id => {
         const w = state.workers.find(w => w.id === id);
-        return { workerId: id, workerCode: w ? (w.code || '?') : '?' };
+        return { 
+            workerId: id, 
+            workerCode: w ? (w.code || '?') : '?' 
+        };
     });
 
     const projectId = document.getElementById('projectSelect').value;
@@ -1236,7 +594,10 @@ function saveTask(event) {
     closeModal('taskModal');
 }
 
+// =============================================
 // TIMER FUNCTIONS
+// =============================================
+
 function startShift() {
     const workerId = document.getElementById('timerWorker').value;
     if (!workerId) {
@@ -1314,7 +675,10 @@ function updateTimerDisplay() {
     }
 }
 
+// =============================================
 // RECORDS - OPRAVENO
+// =============================================
+
 function renderRecordsList() {
     const container = document.getElementById('recordsList');
     if (!container) return;
@@ -1379,7 +743,7 @@ function renderRecordsList() {
             const projectName = project ? project.jmenoProjektu : 'Neznámý projekt';
             const date = new Date(entry.timestamp);
             
-            // OPRAVA: Bezpečná kontrola
+            // OPRAVA: Bezpečná kontrola workers a rewardPerWorker
             const workers = entry.workers || [{ workerId: 'unknown', workerCode: '?' }];
             const rewardPerWorker = entry.rewardPerWorker || entry.reward || 0;
             
@@ -1397,12 +761,24 @@ function renderRecordsList() {
             const canEdit = entry.x !== null;
             
             return `
-                <div class="record-item">
+                <div class="record-item" data-entry-id="${entry.id}" data-entry-type="task">
                     <div class="record-header">
                         <span class="record-type record-type-task">Stůl</span>
                         <div class="record-actions">
-                            ${canEdit ? `<button onclick="openEditTaskModal('${entry.id}')" class="record-btn" style="background: rgba(59, 130, 246, 0.2); color: var(--color-primary);">Upravit</button>` : ''}
-                            <button onclick="deleteEntry('${entry.id}')" class="record-btn" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
+                            ${canEdit ? `<button onclick="openEditTaskModal('${entry.id}')" 
+                                               id="edit-task-${entry.id}" 
+                                               class="action-btn record-btn" 
+                                               data-action="edit-task" 
+                                               data-entry-id="${entry.id}"
+                                               aria-label="Upravit stůl ${entry.tableNumber}"
+                                               style="background: rgba(59, 130, 246, 0.2); color: var(--color-primary);">Upravit</button>` : ''}
+                            <button onclick="deleteEntry('${entry.id}')" 
+                                   id="delete-task-${entry.id}" 
+                                   class="action-btn record-btn btn-danger" 
+                                   data-action="delete-entry" 
+                                   data-entry-id="${entry.id}"
+                                   aria-label="Smazat stůl ${entry.tableNumber}"
+                                   style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
                         </div>
                     </div>
                     <div style="margin-bottom: 8px;"><strong>${entry.tableNumber}</strong></div>
@@ -1426,11 +802,17 @@ function renderRecordsList() {
             const endDate = new Date(entry.endTime);
             
             return `
-                <div class="record-item">
+                <div class="record-item" data-entry-id="${entry.id}" data-entry-type="hourly">
                     <div class="record-header">
                         <span class="record-type record-type-hourly">Hodiny</span>
                         <div class="record-actions">
-                            <button onclick="deleteEntry('${entry.id}')" class="record-btn" style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
+                            <button onclick="deleteEntry('${entry.id}')" 
+                                   id="delete-hourly-${entry.id}" 
+                                   class="action-btn record-btn btn-danger" 
+                                   data-action="delete-entry" 
+                                   data-entry-id="${entry.id}"
+                                   aria-label="Smazat hodinový záznam pro ${workerName}"
+                                   style="background: rgba(239, 68, 68, 0.2); color: var(--color-danger);">Smazat</button>
                         </div>
                     </div>
                     <div style="margin-bottom: 8px;" class="record-item-worker-name">
@@ -1468,7 +850,10 @@ function deleteEntry(entryId) {
     }
 }
 
+// =============================================
 // STATISTICS - OPRAVENO
+// =============================================
+
 function updateStatistics() {
     const workerFilter = document.getElementById('statsWorkerFilter')?.value || '';
     const projectFilter = document.getElementById('statsProjectFilter')?.value || '';
@@ -1516,7 +901,7 @@ function updateStatistics() {
     if (statElements.tables) statElements.tables.textContent = totalTables;
     if (statElements.avgReward) statElements.avgReward.textContent = `€${avgReward.toFixed(2)}`;
     
-    // Worker chart - OPRAVENO
+    // Worker chart
     const workerChart = document.getElementById('workerEarningsChart');
     if (workerChart) {
         const workerEarnings = {};
@@ -1553,7 +938,7 @@ function updateStatistics() {
             workerChart.innerHTML = workerEntries
                 .sort((a, b) => b.amount - a.amount)
                 .map(data => `
-                    <div style="margin-bottom: 12px;">
+                    <div style="margin-bottom: 12px;" data-worker-earnings="${data.amount}">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                             <span style="display: flex; align-items: center; gap: 8px;">
                                 <span class="worker-color-dot" style="background-color: ${data.color}"></span>
@@ -1572,7 +957,10 @@ function updateStatistics() {
     }
 }
 
+// =============================================
 // EXPORT FUNCTIONS
+// =============================================
+
 function escapeCSV(str) {
     if (str === null || str === undefined) return '""';
     str = String(str);
@@ -1642,7 +1030,10 @@ function exportToCSV() {
     showToast('CSV export úspěšně vygenerován', 'success');
 }
 
+// =============================================
 // BACKUP/RESTORE
+// =============================================
+
 async function backupData() {
     showLoader();
     try {
@@ -1679,6 +1070,7 @@ async function backupData() {
         showToast('Záloha úspěšně vytvořena', 'success');
         
     } catch (error) {
+        console.error('Backup error:', error);
         hideLoader();
         showToast('Chyba při vytváření zálohy', 'error');
     }
@@ -1709,7 +1101,11 @@ async function restoreData(event) {
                 throw new Error('Neplatný formát souboru zálohy.');
             }
 
-            localStorage.clear();
+            localStorage.removeItem('solarWorkState_v4');
+            localStorage.removeItem('solarWorkTimer_v4');
+            localStorage.removeItem('solarWorkState_v3');
+            localStorage.removeItem('solarWorkTimer_v3');
+            
             await clearPDFStore();
             
             if (backupData.localStorage.solarWorkState_v4) {
@@ -1736,9 +1132,11 @@ async function restoreData(event) {
 
             hideLoader();
             showToast('Data úspěšně obnovena. Aplikace se restartuje.', 'success');
+            
             setTimeout(() => location.reload(), 2000);
 
         } catch (error) {
+            console.error('Restore error:', error);
             hideLoader();
             showToast(`Chyba při obnově: ${error.message}`, 'error');
         } finally {
@@ -1746,10 +1144,19 @@ async function restoreData(event) {
         }
     };
     
+    reader.onerror = () => {
+        hideLoader();
+        showToast('Chyba při čtení souboru', 'error');
+        event.target.value = null;
+    };
+    
     reader.readAsText(file);
 }
 
+// =============================================
 // DAILY REPORT
+// =============================================
+
 function generateDailyReport() {
     const dateInput = document.getElementById('reportDate')?.value;
     if (!dateInput) {
@@ -1809,12 +1216,23 @@ function generateDailyReport() {
         let taskTotal = 0;
         if (data.tasks.length > 0) {
             report += '\nHotové Stoly:\n';
+            
+            const tasksByProject = {};
             data.tasks.forEach(task => {
                 const project = state.projects.find(p => p.id === task.projectId);
                 const projectName = project ? project.jmenoProjektu : 'N/A';
-                report += `  • Stůl ${task.tableNumber} (${projectName}) - €${task.reward.toFixed(2)}\n`;
-                taskTotal += task.reward;
+                if (!tasksByProject[projectName]) {
+                    tasksByProject[projectName] = { tables: [], reward: 0 };
+                }
+                tasksByProject[projectName].tables.push(task.tableNumber);
+                tasksByProject[projectName].reward += task.reward;
             });
+
+            Object.entries(tasksByProject).forEach(([projectName, projectData]) => {
+                report += `  • Projekt: ${projectName}\n    Stoly: ${projectData.tables.join(', ')}\n    Odměna: €${projectData.reward.toFixed(2)}\n`;
+                taskTotal += projectData.reward;
+            });
+            
             report += `  Celkem ze stolů: €${taskTotal.toFixed(2)}\n`;
         }
         
@@ -1858,7 +1276,10 @@ function copyReport() {
             const textArea = document.createElement("textarea");
             textArea.value = reportText;
             textArea.style.position = "fixed";
+            textArea.style.top = "0";
+            textArea.style.left = "0";
             document.body.appendChild(textArea);
+            textArea.focus();
             textArea.select();
             document.execCommand('copy');
             document.body.removeChild(textArea);
@@ -1869,7 +1290,10 @@ function copyReport() {
     }
 }
 
+// =============================================
 // MANUAL ENTRY FUNCTIONS
+// =============================================
+
 function openManualHourModal() {
     const form = document.getElementById('manualHourForm');
     const dateInput = document.getElementById('manualHourDate');
@@ -1888,7 +1312,7 @@ function saveManualHours(event) {
     const totalHours = parseFloat(document.getElementById('manualHourTotalHours').value);
     
     if (!workerId || !dateInput || !totalHours || totalHours <= 0) {
-        showToast('Vyplňte všechna pole', 'error');
+        showToast('Vyplněte všechna pole', 'error');
         return;
     }
 
@@ -1944,7 +1368,7 @@ function saveManualTask(event) {
     const rewardPerWorker = parseFloat(document.getElementById('manualTaskRewardPerWorker').value);
 
     if (selectedWorkers.length === 0 || !projectId || !dateInput || !tableNumbersString || rewardPerWorker < 0) {
-        showToast('Vyplňte všechna pole (včetně pracovníků)', 'error');
+        showToast('Vyplněte všechna pole (včetně pracovníků)', 'error');
         return;
     }
 
@@ -1953,7 +1377,9 @@ function saveManualTask(event) {
         return { workerId: id, workerCode: w ? (w.code || '?') : '?' };
     });
     
-    const tableNumbers = tableNumbersString.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    const tableNumbers = tableNumbersString.split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
     
     if (tableNumbers.length === 0) {
         showToast('Zadejte alespoň jedno číslo stolu', 'error');
@@ -1985,10 +1411,14 @@ function saveManualTask(event) {
     renderRecordsList();
     updateStatistics();
     
-    if (document.getElementById('projectSelect')?.value === projectId) {
+    if (document.getElementById('projectSelect').value === projectId) {
         renderWorkerBadges(projectId);
     }
 
     closeModal('manualTaskModal');
     showToast(`Ručně přidáno ${entriesAdded} stolů`, 'success');
 }
+
+// =============================================
+// KONEC FUNKCÍ
+// =============================================

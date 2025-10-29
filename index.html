@@ -3,134 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#1e293b">
     <title>Solar Work Count Lithuania by Marty Party</title>
 
-    <!-- App assets -->
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="ai-styles.css">
 
-    <!-- Načtení písma Inter (pro moderní typografii) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- PDF.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 </head>
-<body>
-    <!-- Toast Notification -->
-    <div id="toast" class="toast"></div>
+<body data-version="4.1">
+    <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+    <div id="loader" class="loader" role="status" aria-label="Načítání"><div class="loader-spinner"></div></div>
 
-    <!-- Loader -->
-    <div id="loader" class="loader">
-        <div class="loader-spinner"></div>
-    </div>
-
-    <!-- Header -->
     <div class="header">
-        <h1>Solar Work Count Lithuania</h1>
-        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px;">by Marty Party</div>
+        <h1>Solar Work Count Lithuania v4.1</h1>
+        <div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px;">by Marty Party · 🤖 AI Ready</div>
     </div>
 
-    <!-- Pages Container -->
     <div class="pages-container">
-        
-        <!-- ============================================= -->
-        <!-- PAGE 1: PLÁN (Přepracováno dle návrhu)       -->
-        <!-- ============================================= -->
-        <div id="page-plan" class="page active">
-
-            <!-- Nová Karta Plánu -->
+        <div id="page-plan" class="page active" data-page-name="plan">
             <div class="plan-card">
-                
-                <!-- Hlavička Karty -->
                 <div class="plan-header">
                     <div>
-                        <h2 id="planTitle" class="plan-title">Vyberte projekt</h2>
-                        <!-- Skrytý select, který ovládá kartu -->
-                        <select id="projectSelect" class="form-control" style="margin-top: 16px; max-width: 300px;">
+                        <h2 id="plan-title" class="plan-title" data-dynamic="plan-title">Vyberte projekt</h2>
+                        <select id="project-picker" class="project-select form-control" data-role="picker" data-action="select-project" aria-label="Výběr projektu" style="margin-top: 16px; max-width: 300px;">
                             <option value="">-- Vyberte projekt --</option>
                         </select>
                     </div>
-                    <div id="planActions" class="plan-actions" style="display: none;">
-                        <button id="planStatsButton">Statistika</button>
-                        <button id="planEditButton">Upravit</button>
+                    <div id="plan-actions" class="plan-actions" style="display: none;">
+                        <button id="plan-stats-button" class="action-btn" data-action="view-stats" aria-label="Zobrazit statistiky projektu">Statistika</button>
+                        <button id="plan-edit-button" class="action-btn" data-action="edit-project" aria-label="Upravit projekt">Upravit</button>
+                        <button id="ai-mode-toggle" class="action-btn btn-secondary" data-action="toggle-ai-mode" aria-label="Přepnout AI režim" onclick="toggleAIMode()">🤖 AI</button>
                     </div>
                 </div>
-
-                <!-- Ovládání PDF -->
-                <div id="pdfControls" class="pdf-controls" style="display: none;">
+                <div id="pdf-controls" class="pdf-controls" style="display: none;">
                     <div class="flex gap-8">
-                        <button id="prevPage" class="btn-secondary pdf-control-btn">‹</button>
-                        <span id="pageIndicator" class="page-indicator">Strana 1 / 1</span>
-                        <button id="nextPage" class="btn-secondary pdf-control-btn">›</button>
+                        <button id="prev-page" class="btn-secondary pdf-control-btn action-btn" data-action="prev-page" aria-label="Předchozí strana">‹</button>
+                        <span id="page-indicator" class="page-indicator" data-info="page-indicator" aria-live="polite">Strana 1 / 1</span>
+                        <button id="next-page" class="btn-secondary pdf-control-btn action-btn" data-action="next-page" aria-label="Další strana">›</button>
                     </div>
                     <div class="flex gap-8">
-                        <button id="zoomOut" class="btn-secondary pdf-control-btn">-</button>
-                        <button id="resetZoom" class="btn-secondary pdf-control-btn">Reset</button>
-                        <button id="zoomIn" class="btn-secondary pdf-control-btn">+</button>
+                        <button id="zoom-out" class="btn-secondary pdf-control-btn action-btn" data-action="zoom-out" aria-label="Oddálit">-</button>
+                        <button id="reset-zoom" class="btn-secondary pdf-control-btn action-btn" data-action="reset-zoom" aria-label="Resetovat zoom">Reset</button>
+                        <button id="zoom-in" class="btn-secondary pdf-control-btn action-btn" data-action="zoom-in" aria-label="Přiblížit">+</button>
                     </div>
                 </div>
-
-                <!-- PDF Preview (Canvas) -->
-                <div id="canvasWrapper" class="pdf-preview">
-                    <canvas id="pdfCanvas"></canvas>
-                    <div id="noPlanMessage" class="empty-state" style="border: none; background: transparent;">
+                <div id="canvas-wrapper" class="pdf-preview">
+                    <canvas id="pdf-canvas" class="plan-canvas" data-surface="plan" role="img" aria-label="PDF plán s piny"></canvas>
+                    <div id="no-plan-message" class="empty-state" style="border: none; background: transparent;">
                         <div class="empty-state-icon">📋</div>
                         <div>Pro zobrazení plánu vyberte projekt výše.</div>
-                        <button onclick="navigateTo('settings')" class="btn btn-primary mt-16">Přidat Projekt</button>
+                        <button onclick="navigateTo('settings')" class="btn btn-primary mt-16" data-action="go-to-settings">Přidat Projekt</button>
                     </div>
                 </div>
-
-                <!-- Legenda / Badges Pracovníků -->
-                <div id="workerBadgesContainer" class="worker-badges-container" style="display: none;">
+                <div id="worker-badges-container" class="worker-badges-container" style="display: none;">
                     <h4 style="font-size: 14px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 12px;">Legenda:</h4>
-                    <div id="workerBadges" class="worker-badges">
-                        <!-- Badges budou generovány pomocí JS -->
-                    </div>
+                    <div id="worker-badges" class="worker-badges" data-info="worker-legend"></div>
                 </div>
-
             </div>
-            <!-- Konec Karty Plánu -->
         </div>
 
-        <!-- ============================================= -->
-        <!-- PAGE 2: ZÁZNAMY                             -->
-        <!-- ============================================= -->
-        <div id="page-records" class="page">
+        <div id="page-records" class="page" data-page-name="records">
             <div class="card mb-16">
-                <h2 class="mb-16" style="font-size: 18px;">Časovač Směny</h2>
+                <h2 class="mb-16" style="font-size: 18px;">⏱️ Časovač Směny</h2>
                 <div class="form-group">
                     <label class="form-label">Pracovník</label>
-                    <select id="timerWorker" class="form-control">
+                    <select id="timer-worker" class="worker-select form-control" data-role="picker" data-field="timer-worker" aria-label="Výběr pracovníka pro časovač">
                         <option value="">-- Vyberte pracovníka --</option>
                     </select>
                 </div>
-                <div class="timer-display" id="timerDisplay">00:00:00</div>
+                <div id="timer-display" class="timer-display" data-info="timer-display" aria-live="polite" aria-label="Čas směny">00:00:00</div>
                 <div class="flex gap-8">
-                    <button id="startShift" class="btn btn-success w-full">Začít Směnu</button>
-                    <button id="stopShift" class="btn btn-danger w-full" style="display: none;">Ukončit Směnu</button>
+                    <button id="start-shift" class="action-btn btn btn-success w-full" data-action="start-shift" role="button" aria-label="Začít směnu" aria-controls="timer-display">▶️ Začít Směnu</button>
+                    <button id="stop-shift" class="action-btn btn btn-danger w-full" data-action="stop-shift" role="button" aria-label="Ukončit směnu" aria-controls="timer-display" style="display: none;">⏹️ Ukončit Směnu</button>
                 </div>
             </div>
 
-            <!-- Ruční Zadání -->
             <div class="card mb-16">
-                <h2 class="mb-16" style="font-size: 18px;">Ruční Zadání Záznamu</h2>
+                <h2 class="mb-16" style="font-size: 18px;">📝 Ruční Zadání Záznamu</h2>
                 <div class="flex gap-8">
-                    <button onclick="openManualHourModal()" class="btn btn-secondary w-full">Zadat Hodiny</button>
-                    <button onclick="openManualTaskModal()" class="btn btn-secondary w-full">Zadat Stoly</button>
+                    <button onclick="openManualHourModal()" id="add-manual-hours" class="action-btn btn btn-secondary w-full" data-action="add-manual-hours" aria-label="Zadat hodiny ručně">Zadat Hodiny</button>
+                    <button onclick="openManualTaskModal()" id="add-manual-tasks" class="action-btn btn btn-secondary w-full" data-action="add-manual-tasks" aria-label="Zadat stoly ručně">Zadat Stoly</button>
                 </div>
             </div>
 
-            <h2 style="font-size: 18px; margin-bottom: 16px;">Všechny Záznamy</h2>
+            <h2 style="font-size: 18px; margin-bottom: 16px;">📄 Všechny Záznamy</h2>
             <div class="card mb-16">
                 <h3 class="mb-16" style="font-size: 16px;">Filtry záznamů</h3>
                 <div class="form-group">
                     <label class="form-label">Typ</label>
-                    <select id="recordsFilter" class="form-control">
+                    <select id="records-filter" class="filter-select form-control" data-role="filter" data-field="type" aria-label="Filtr podle typu záznamu">
                         <option value="all">Vše</option>
                         <option value="task">Stoly</option>
                         <option value="hourly">Hodiny</option>
@@ -138,19 +107,19 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Pracovník</label>
-                    <select id="recordsWorkerFilter" class="form-control">
+                    <select id="records-worker-filter" class="filter-select form-control" data-role="filter" data-field="worker" aria-label="Filtr podle pracovníka">
                         <option value="">Všichni pracovníci</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Projekt</label>
-                    <select id="recordsProjectFilter" class="form-control">
+                    <select id="records-project-filter" class="filter-select form-control" data-role="filter" data-field="project" aria-label="Filtr podle projektu">
                         <option value="">Všechny projekty</option>
                     </select>
                 </div>
                 <div class="form-group mb-8">
                     <label class="form-label">Období</label>
-                    <select id="recordsDateFilter" class="form-control">
+                    <select id="records-date-filter" class="filter-select form-control" data-role="filter" data-field="date" aria-label="Filtr podle období">
                         <option value="all">Všechna data</option>
                         <option value="today">Dnes</option>
                         <option value="this_week">Tento týden</option>
@@ -159,307 +128,73 @@
                 </div>
             </div>
 
-            <div id="recordsList"></div>
+            <div id="records-list" data-content="records-list" role="list" aria-label="Seznam záznamů"></div>
         </div>
 
-        <!-- ============================================= -->
-        <!-- PAGE 3: STATISTIKY                          -->
-        <!-- ============================================= -->
-        <div id="page-statistics" class="page">
+        <div id="page-statistics" class="page" data-page-name="statistics">
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="statTotalEarnings">€0</div>
-                    <div class="stat-label">Celkové Výdělky</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="statTotalHours">0h</div>
-                    <div class="stat-label">Celkové Hodiny</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="statTotalTables">0</div>
-                    <div class="stat-label">Celkem Stolů</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="statAvgReward">€0</div>
-                    <div class="stat-label">Průměr/Stůl</div>
-                </div>
+                <div class="stat-card" data-kpi="total-earnings"><div class="stat-value" id="stat-total-earnings" data-value="total-earnings">€0</div><div class="stat-label">Celkové Výdělky</div></div>
+                <div class="stat-card" data-kpi="total-hours"><div class="stat-value" id="stat-total-hours" data-value="total-hours">0h</div><div class="stat-label">Celkové Hodiny</div></div>
+                <div class="stat-card" data-kpi="total-tables"><div class="stat-value" id="stat-total-tables" data-value="total-tables">0</div><div class="stat-label">Celkem Stolů</div></div>
+                <div class="stat-card" data-kpi="avg-reward"><div class="stat-value" id="stat-avg-reward" data-value="avg-reward">€0</div><div class="stat-label">Průměr/Stůl</div></div>
             </div>
-
             <div class="card mb-16">
                 <h3 class="mb-16" style="font-size: 16px;">Filtry</h3>
-                <div class="form-group">
-                    <label class="form-label">Pracovník</label>
-                    <select id="statsWorkerFilter" class="form-control">
-                        <option value="">Všichni pracovníci</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Projekt</label>
-                    <select id="statsProjectFilter" class="form-control">
-                        <option value="">Všechny projekty</option>
-                    </select>
-                </div>
+                <div class="form-group"><label class="form-label">Pracovník</label><select id="stats-worker-filter" class="filter-select form-control" data-role="filter" data-field="stats-worker" aria-label="Filtr pracovníka pro statistiky"><option value="">Všichni pracovníci</option></select></div>
+                <div class="form-group"><label class="form-label">Projekt</label><select id="stats-project-filter" class="filter-select form-control" data-role="filter" data-field="stats-project" aria-label="Filtr projektu pro statistiky"><option value="">Všechny projekty</option></select></div>
             </div>
-
-            <h3 class="mb-16" style="font-size: 16px;">Výdělky podle Pracovníků</h3>
-            <div id="workerEarningsChart" class="chart-placeholder">
-                <div>Graf se zobrazí zde</div>
-            </div>
-
-            <h3 class="mb-16" style="font-size: 16px;">Rozdělení: Stoly vs Hodiny</h3>
-            <div id="taskVsHourlyChart" class="chart-placeholder">
-                <div>Graf se zobrazí zde</div>
-            </div>
+            <h3 class="mb-16" style="font-size: 16px;">📈 Výdělky podle Pracovníků</h3>
+            <div id="worker-earnings-chart" class="chart-placeholder" data-chart="worker-earnings" role="img" aria-label="Graf výdělků podle pracovníků"><div>Graf se zobrazí zde</div></div>
+            <h3 class="mb-16" style="font-size: 16px;">📊 Rozdělení: Stoly vs Hodiny</h3>
+            <div id="task-vs-hourly-chart" class="chart-placeholder" data-chart="task-vs-hourly" role="img" aria-label="Graf rozdělení stoly vs hodiny"><div>Graf se zobrazí zde</div></div>
         </div>
 
-        <!-- ============================================= -->
-        <!-- PAGE 4: NASTAVENÍ                           -->
-        <!-- ============================================= -->
-        <div id="page-settings" class="page">
+        <div id="page-settings" class="page" data-page-name="settings">
             <div class="card mb-24">
-                <h2 class="mb-16" style="font-size: 18px;">Správa Projektů</h2>
-                <button onclick="openProjectModal()" class="btn btn-primary w-full mb-16">Přidat Nový Projekt</button>
-                <div id="projectsList"></div>
+                <h2 class="mb-16" style="font-size: 18px;">💼 Správa Projektů</h2>
+                <button onclick="openProjectModal()" id="add-new-project" class="action-btn btn btn-primary w-full mb-16" data-action="add-project" aria-label="Přidat nový projekt">Přidat Nový Projekt</button>
+                <div id="projects-list" data-content="projects-list" role="list" aria-label="Seznam projektů"></div>
             </div>
-
             <div class="card mb-24">
-                <h2 class="mb-16" style="font-size: 18px;">Správa Pracovníků</h2>
-                <button onclick="openWorkerModal()" class="btn btn-primary w-full mb-16">Přidat Nového Pracovníka</button>
-                <div id="workersList"></div>
+                <h2 class="mb-16" style="font-size: 18px;">👥 Správa Pracovníků</h2>
+                <button onclick="openWorkerModal()" id="add-new-worker" class="action-btn btn btn-primary w-full mb-16" data-action="add-worker" aria-label="Přidat nového pracovníka">Přidat Nového Pracovníka</button>
+                <div id="workers-list" data-content="workers-list" role="list" aria-label="Seznam pracovníků"></div>
             </div>
-
             <div class="card mb-24">
-                <h2 class="mb-16" style="font-size: 18px;">Denní Report</h2>
-                <div class="form-group">
-                    <label class="form-label">Datum</label>
-                    <input type="date" id="reportDate" class="form-control">
+                <h2 class="mb-16" style="font-size: 18px;">📅 Denní Report</h2>
+                <div class="form-group"><label class="form-label">Datum</label><input type="date" id="report-date" class="date-input form-control" data-field="report-date" aria-label="Datum pro report"></div>
+                <button onclick="generateDailyReport()" id="generate-report" class="action-btn btn btn-primary w-full" data-action="generate-report" aria-label="Generovat denní report">Generovat Denní Report</button>
+            </div>
+            <div class="card mb-24">
+                <h2 class="mb-16" style="font-size: 18px;">🗜️ Záloha a Export</h2>
+                <div class="flex gap-8 mb-12">
+                    <button id="backup-data" class="action-btn btn btn-secondary w-full" data-action="backup-data" aria-label="Zálohovat všechna data">Zálohovat Data</button>
+                    <button id="restore-data" class="action-btn btn btn-primary w-full" data-action="restore-data" aria-label="Obnovit data ze zálohy">Obnovit Data</button>
                 </div>
-                <button onclick="generateDailyReport()" class="btn btn-primary w-full">Generovat Denní Report</button>
-            </div>
-
-            <div class="card mb-24">
-                <h2 class="mb-16" style="font-size: 18px;">Záloha a Obnova</h2>
-                <div class="flex gap-8">
-                    <button id="backupButton" class="btn btn-secondary w-full">Zálohovat Data</button>
-                    <button id="restoreButton" class="btn btn-primary w-full">Obnovit Data</button>
-                </div>
-                
-                <!-- NOVÉ TLAČÍTKO PRO CSV EXPORT -->
-                <button id="exportCSV" class="btn btn-secondary w-full" style="margin-top: 12px; background: rgba(34, 197, 94, 0.2); color: var(--color-success); border-color: var(--color-success);">Exportovat Záznamy (CSV)</button>
-                
-                <input type="file" id="restoreFileInput" accept="application/json" style="display: none;">
-                <p style="font-size: 12px; color: var(--color-text-secondary); margin-top: 12px;">
-                    Záloha (.json) uloží vše (včetně PDF). Export (.csv) uloží pouze záznamy o práci pro Excel.
-                </p>
+                <button id="export-csv" class="action-btn btn btn-secondary w-full" data-action="export-csv" aria-label="Exportovat záznamy do CSV" style="background: rgba(34, 197, 94, 0.2); color: var(--color-success); border-color: var(--color-success);">📁 Exportovat Záznamy (CSV)</button>
+                <input type="file" id="restore-file-input" class="file-input" data-field="restore-file" accept="application/json" style="display: none;" aria-label="Vybrat soubor zálohy">
+                <p style="font-size: 12px; color: var(--color-text-secondary); margin-top: 12px;">Záloha (.json) uloží vše (včetně PDF). Export (.csv) uloží pouze záznamy o práci pro Excel.</p>
             </div>
         </div>
     </div>
 
-    <!-- ============================================= -->
-    <!-- SPODNÍ NAVIGACE                             -->
-    <!-- ============================================= -->
-    <nav class="bottom-nav">
-        <div class="nav-item active" onclick="navigateTo('plan')" data-page="plan">
-            <div class="nav-icon">📋</div>
-            <div class="nav-label">Plán</div>
-        </div>
-        <div class="nav-item" onclick="navigateTo('records')" data-page="records">
-            <div class="nav-icon">📝</div>
-            <div class="nav-label">Záznamy</div>
-        </div>
-        <div class="nav-item" onclick="navigateTo('statistics')" data-page="statistics">
-            <div class="nav-icon">📊</div>
-            <div class="nav-label">Statistiky</div>
-        </div>
-        <div class="nav-item" onclick="navigateTo('settings')" data-page="settings">
-            <div class="nav-icon">⚙️</div>
-            <div class="nav-label">Nastavení</div>
-        </div>
+    <nav class="bottom-nav" role="navigation" aria-label="Hlavní navigace">
+        <div class="nav-item active" onclick="navigateTo('plan')" data-page="plan" data-nav="plan" role="button" tabindex="0" aria-label="Přejít na plán"><div class="nav-icon">📋</div><div class="nav-label">Plán</div></div>
+        <div class="nav-item" onclick="navigateTo('records')" data-page="records" data-nav="records" role="button" tabindex="0" aria-label="Přejít na záznamy"><div class="nav-icon">📝</div><div class="nav-label">Záznamy</div></div>
+        <div class="nav-item" onclick="navigateTo('statistics')" data-page="statistics" data-nav="statistics" role="button" tabindex="0" aria-label="Přejít na statistiky"><div class="nav-icon">📈</div><div class="nav-label">Statistiky</div></div>
+        <div class="nav-item" onclick="navigateTo('settings')" data-page="settings" data-nav="settings" role="button" tabindex="0" aria-label="Přejít na nastavení"><div class="nav-icon">⚙️</div><div class="nav-label">Nastavení</div></div>
     </nav>
 
-    <!-- ============================================= -->
-    <!-- MODÁLY                                      -->
-    <!-- ============================================= -->
-
-    <!-- Modál: Přidat/Upravit Projekt -->
-    <div id="projectModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title" id="projectModalTitle">Přidat Nový Projekt</h3>
-                <button class="modal-close" onclick="closeModal('projectModal')">&times;</button>
-            </div>
-            <form id="projectForm" onsubmit="saveProject(event)">
-                <input type="hidden" id="projectId">
-                <div class="form-group">
-                    <label class="form-label">Jméno Projektu</label>
-                    <input type="text" id="projectName" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Plán PDF</label>
-                    <input type="file" id="projectPDF" class="form-control" accept="application/pdf">
-                    <div id="currentPDF" style="font-size: 12px; color: var(--color-text-secondary); margin-top: 8px;"></div>
-                </div>
-                <div class="flex gap-8">
-                    <button type="button" onclick="closeModal('projectModal')" class="btn btn-secondary w-full">Zrušit</button>
-                    <button type="submit" class="btn btn-primary w-full">Uložit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modál: Přidat/Upravit Pracovníka -->
-    <div id="workerModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title" id="workerModalTitle">Přidat Nového Pracovníka</h3>
-                <button class="modal-close" onclick="closeModal('workerModal')">&times;</button>
-            </div>
-            <form id="workerForm" onsubmit="saveWorker(event)">
-                <input type="hidden" id="workerId">
-                <div class="form-group">
-                    <label class="form-label">Jméno</label>
-                    <input type="text" id="workerName" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Číslo/Kód (pro plán)</label>
-                    <input type="text" id="workerCode" class="form-control" placeholder="Např: 1, 007, MP">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Hodinová Sazba (€)</label>
-                    <input type="number" id="workerRate" class="form-control" step="0.01" min="0" required>
-                </div>
-                <div class="flex gap-8">
-                    <button type="button" onclick="closeModal('workerModal')" class="btn btn-secondary w-full">Zrušit</button>
-                    <button type="submit" class="btn btn-primary w-full">Uložit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modál: Přidat Úkol (z plánu) -->
-    <div id="taskModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title" id="taskModalTitle">Zadat Hotový Stůl</h3>
-                <button class="modal-close" onclick="closeModal('taskModal')">&times;</button>
-            </div>
-            <form id="taskForm" onsubmit="saveTask(event)">
-                <input type="hidden" id="taskEntryId">
-                <input type="hidden" id="taskX">
-                <input type="hidden" id="taskY">
-                
-                <!-- ZMĚNA: Select nahrazen Checkboxy -->
-                <div class="form-group">
-                    <label class="form-label">Pracovníci</label>
-                    <div id="taskWorkerChecklist" class="worker-checklist">
-                        <!-- Bude naplněno JS -->
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Číslo Stolu/Stringu</label>
-                    <input type="text" id="taskTableNumber" class="form-control" required>
-                </div>
-                
-                <!-- ZMĚNA: Přejmenováno id a label -->
-                <div class="form-group">
-                    <label class="form-label">Odměna na pracovníka (€)</label>
-                    <input type="number" id="taskRewardPerWorker" class="form-control" step="0.01" min="0" required>
-                </div>
-                
-                <div class="flex gap-8">
-                    <button type="button" onclick="closeModal('taskModal')" class="btn btn-secondary w-full">Zrušit</button>
-                    <button type="submit" class="btn btn-primary w-full">Uložit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modál: Ruční Hodiny -->
-    <div id="manualHourModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Zadat Ruční Hodiny</h3>
-                <button class="modal-close" onclick="closeModal('manualHourModal')">&times;</button>
-            </div>
-            <form id="manualHourForm" onsubmit="saveManualHours(event)">
-                <div class="form-group">
-                    <label class="form-label">Pracovník</label>
-                    <select id="manualHourWorker" class="form-control" required></select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Datum</label>
-                    <input type="date" id="manualHourDate" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Počet Hodin</label>
-                    <input type="number" id="manualHourTotalHours" class="form-control" step="0.1" min="0" required>
-                </div>
-                <div class="flex gap-8">
-                    <button type="button" onclick="closeModal('manualHourModal')" class="btn btn-secondary w-full">Zrušit</button>
-                    <button type="submit" class="btn btn-primary w-full">Uložit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modál: Ruční Stoly -->
-    <div id="manualTaskModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Zadat Stoly Ručně</h3>
-                <button class="modal-close" onclick="closeModal('manualTaskModal')">&times;</button>
-            </div>
-            <form id="manualTaskForm" onsubmit="saveManualTask(event)">
-                
-                <!-- ZMĚNA: Select nahrazen Checkboxy -->
-                <div class="form-group">
-                    <label class="form-label">Pracovníci</label>
-                    <div id="manualTaskWorkerChecklist" class="worker-checklist">
-                        <!-- Bude naplněno JS -->
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Projekt</label>
-                    <select id="manualTaskProject" class="form-control" required></select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Datum</label>
-                    <input type="date" id="manualTaskDate" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Čísla Stolů (oddělte čárkou, např: 1, 2, 5A)</label>
-                    <input type="text" id="manualTaskTableNumbers" class="form-control" required>
-                </div>
-                
-                <!-- ZMĚNA: Přejmenováno id a label -->
-                <div class="form-group">
-                    <label class="form-label">Odměna na pracovníka (€)</label>
-                    <input type="number" id="manualTaskRewardPerWorker" class="form-control" step="0.01" min="0" required>
-                </div>
-
-                <div class="flex gap-8">
-                    <button type="button" onclick="closeModal('manualTaskModal')" class="btn btn-secondary w-full">Zrušit</button>
-                    <button type="submit" class="btn btn-primary w-full">Uložit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modál: Denní Report -->
-    <div id="reportModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Denní Report</h3>
-                <button class="modal-close" onclick="closeModal('reportModal')">&times;</button>
-            </div>
-            <div id="reportContent" style="background: rgba(0,0,0,0.2); padding: 16px; border-radius: 8px; font-family: monospace; font-size: 14px; white-space: pre-wrap; max-height: 400px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);"></div>
-            <button onclick="copyReport()" class="btn btn-primary w-full mt-16">Kopírovat Text</button>
-        </div>
-    </div>
+    <script>
+        function connectCompatibilityIds() {
+            const idMappings = { 'projectSelect': 'project-picker', 'planTitle': 'plan-title', 'planActions': 'plan-actions', 'planStatsButton': 'plan-stats-button', 'planEditButton': 'plan-edit-button', 'pdfControls': 'pdf-controls', 'prevPage': 'prev-page', 'nextPage': 'next-page', 'pageIndicator': 'page-indicator', 'zoomOut': 'zoom-out', 'zoomIn': 'zoom-in', 'resetZoom': 'reset-zoom', 'canvasWrapper': 'canvas-wrapper', 'pdfCanvas': 'pdf-canvas', 'noPlanMessage': 'no-plan-message', 'workerBadgesContainer': 'worker-badges-container', 'workerBadges': 'worker-badges', 'recordsList': 'records-list', 'timerWorker': 'timer-worker', 'timerDisplay': 'timer-display', 'startShift': 'start-shift', 'stopShift': 'stop-shift', 'recordsFilter': 'records-filter', 'recordsWorkerFilter': 'records-worker-filter', 'recordsProjectFilter': 'records-project-filter', 'recordsDateFilter': 'records-date-filter', 'statsWorkerFilter': 'stats-worker-filter', 'statsProjectFilter': 'stats-project-filter', 'statTotalEarnings': 'stat-total-earnings', 'statTotalHours': 'stat-total-hours', 'statTotalTables': 'stat-total-tables', 'statAvgReward': 'stat-avg-reward', 'workerEarningsChart': 'worker-earnings-chart', 'taskVsHourlyChart': 'task-vs-hourly-chart', 'projectsList': 'projects-list', 'workersList': 'workers-list', 'reportDate': 'report-date', 'backupButton': 'backup-data', 'restoreButton': 'restore-data', 'exportCSV': 'export-csv', 'restoreFileInput': 'restore-file-input', 'reportContent': 'report-content', 'projectModal': 'project-modal', 'projectModalTitle': 'project-modal-title', 'projectId': 'project-id', 'projectName': 'project-name', 'projectPDF': 'project-pdf', 'currentPDF': 'current-pdf', 'projectForm': 'project-form', 'workerModal': 'worker-modal', 'workerModalTitle': 'worker-modal-title', 'workerId': 'worker-id', 'workerName': 'worker-name', 'workerCode': 'worker-code', 'workerRate': 'worker-rate', 'workerForm': 'worker-form', 'taskModal': 'task-modal', 'taskModalTitle': 'task-modal-title', 'taskEntryId': 'task-entry-id', 'taskX': 'task-x', 'taskY': 'task-y', 'taskWorkerChecklist': 'task-worker-checklist', 'taskTableNumber': 'table-number', 'taskRewardPerWorker': 'reward-per-worker', 'taskForm': 'task-form', 'manualHourModal': 'manual-hour-modal', 'manualHourForm': 'manual-hour-form', 'manualHourWorker': 'manual-hour-worker', 'manualHourDate': 'manual-hour-date', 'manualHourTotalHours': 'manual-hour-total-hours', 'manualTaskModal': 'manual-task-modal', 'manualTaskForm': 'manual-task-form', 'manualTaskWorkerChecklist': 'manual-task-worker-checklist', 'manualTaskProject': 'manual-task-project', 'manualTaskDate': 'manual-task-date', 'manualTaskTableNumbers': 'manual-task-table-numbers', 'manualTaskRewardPerWorker': 'manual-task-reward-per-worker', 'reportModal': 'report-modal' };
+            Object.entries(idMappings).forEach(([oldId, newId]) => { const el = document.getElementById(newId); if (el && !document.getElementById(oldId)) { el.id = oldId; el.setAttribute('data-new-id', newId); } });
+        }
+        function toggleAIMode() { if (window.SolarWorkAPI) { window.SolarWorkAPI.aiMode ? window.SolarWorkAPI.disableAIMode() : window.SolarWorkAPI.enableAIMode(); } else { showToast('AI API není k dispozici', 'error'); } }
+        document.addEventListener('DOMContentLoaded', connectCompatibilityIds);
+    </script>
 
     <script src="app.js"></script>
+    <script src="ai-api-v4.1.js"></script>
 </body>
 </html>
-

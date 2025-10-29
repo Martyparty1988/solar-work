@@ -1,0 +1,229 @@
+<!-- ================================================ -->
+<!-- SOLAR WORK v4.0 - HTML DODATKY                  -->
+<!-- ================================================ -->
+
+<!-- 1. NOVÁ PAGE: DASHBOARD - Přidat před <div id="page-plan"> -->
+<div id="page-dashboard" class="page">
+    <div class="plan-card">
+        <h1 class="mb-16">📁 Dashboard</h1>
+        
+        <!-- Filters -->
+        <div class="mb-16">
+            <div class="flex gap-8">
+                <select id="dashboardDateRange" class="form-control">
+                    <option value="last_7_days">Posledních 7 dní</option>
+                    <option value="this_week">Tento týden</option>
+                    <option value="this_month" selected>Tento měsíc</option>
+                    <option value="last_30_days">Posledních 30 dní</option>
+                </select>
+                <select id="dashboardProjectFilter" class="form-control">
+                    <option value="">Všechny projekty</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="dashboard-kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-icon">💰</div>
+                <div class="kpi-value" id="dashTotalEarnings">€0</div>
+                <div class="kpi-label">Celkové výdělky</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon">📋</div>
+                <div class="kpi-value" id="dashTotalTables">0</div>
+                <div class="kpi-label">Hotoé stoly</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon">⏱️</div>
+                <div class="kpi-value" id="dashTotalHours">0h</div>
+                <div class="kpi-label">Hodiny</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon">⚡</div>
+                <div class="kpi-value" id="dashEfficiency">0</div>
+                <div class="kpi-label">Stoly/Hodina</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-icon">💵</div>
+                <div class="kpi-value" id="dashHourlyRate">€0/h</div>
+                <div class="kpi-label">Průměr/Hodina</div>
+            </div>
+        </div>
+
+        <!-- Productivity Trends -->
+        <div class="card mb-16">
+            <h3 class="mb-16" style="font-size: 16px;">📈 Trend Produktivity</h3>
+            <div id="productivityTrend" class="trend-container"></div>
+        </div>
+
+        <!-- Worker Performance -->
+        <div class="card mb-16">
+            <h3 class="mb-16" style="font-size: 16px;">🏆 Výkonnost Pracovníků</h3>
+            <div id="workerPerformance"></div>
+        </div>
+
+        <!-- Project Progress -->
+        <div class="card mb-16">
+            <h3 class="mb-16" style="font-size: 16px;">📄 Postup Projektů</h3>
+            <div id="projectProgress"></div>
+        </div>
+
+        <!-- Predictions -->
+        <div class="card mb-16">
+            <h3 class="mb-16" style="font-size: 16px;">🔮 Predikce</h3>
+            <div id="predictions"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. PLAN TOOLBAR - Přidat na začátek <div id="page-plan"> před .plan-card -->
+<div class="plan-toolbar">
+    <button id="toggleEditMode" class="btn btn-secondary">
+        ✏️ Upravit Piny
+    </button>
+    <button onclick="createTemplateFromProject()" class="btn btn-secondary">
+        💾 Vytvořit Šablonu
+    </button>
+    <button onclick="toggleTheme()" class="btn btn-secondary">
+        🌓 Téma
+    </button>
+</div>
+
+<!-- Edit Mode Toolbar (skrytý defaultně) -->
+<div id="editModeToolbar" class="edit-toolbar" style="display: none;">
+    <button id="selectAllPins" class="btn btn-secondary">
+        ☑️ Vybrat Vše
+    </button>
+    <button id="deleteSelected" class="btn btn-danger">
+        🗑️ Smazat Vybrané
+    </button>
+    <button id="undoButton" class="btn btn-secondary" disabled>
+        ↶ Zpět
+    </button>
+    <button id="redoButton" class="btn btn-secondary" disabled>
+        ↷ Vpřed
+    </button>
+</div>
+
+<!-- 3. TEMPLATES MANAGEMENT - Přidat do #page-settings před "Správa Projektů" -->
+<div class="card mb-24">
+    <h2 class="mb-16" style="font-size: 18px;">📋 Šablony Projektů</h2>
+    <button onclick="openTemplateModal()" class="btn btn-primary w-full mb-16">
+        Vytvořit Šablonu
+    </button>
+    <div id="templatesList"></div>
+</div>
+
+<!-- 4. ADVANCED REPORTING - Přidat do #page-settings před "Záloha a Obnova" -->
+<div class="card mb-24">
+    <h2 class="mb-16" style="font-size: 18px;">📅 Pokročilé Reporty</h2>
+    <div class="form-group">
+        <label class="form-label">Období pro report</label>
+        <select id="reportDateRange" class="form-control">
+            <option value="today">Dnes</option>
+            <option value="this_week">Tento týden</option>
+            <option value="this_month" selected>Tento měsíc</option>
+            <option value="last_7_days">Posledních 7 dní</option>
+            <option value="last_30_days">Posledních 30 dní</option>
+        </select>
+    </div>
+    <div class="flex gap-8">
+        <button id="exportPDFReport" class="btn btn-secondary w-full">
+            📄 PDF Report
+        </button>
+        <button id="exportExcelReport" class="btn btn-secondary w-full">
+            📁 Excel Export
+        </button>
+    </div>
+</div>
+
+<!-- 5. ENHANCED TIMER - Nahradit existující timer sekci v #page-records -->
+<div class="card mb-16">
+    <h2 class="mb-16" style="font-size: 18px;">⏱️ Časovač Směny</h2>
+    <div class="form-group">
+        <label class="form-label">Pracovník</label>
+        <select id="timerWorker" class="form-control">
+            <option value="">-- Vyberte pracovníka --</option>
+        </select>
+    </div>
+    <div class="timer-display" id="timerDisplay">00:00:00</div>
+    <div id="breakInfo" class="break-info" style="display: none;">
+        ⏸️ Přestávka: <span id="breakDuration">0 min</span>
+    </div>
+    <div class="flex gap-8">
+        <button id="startShift" class="btn btn-success w-full">▶️ Začít Směnu</button>
+        <button id="pauseShift" class="btn btn-secondary w-full" style="display: none;">⏸️ Přestávka</button>
+        <button id="stopShift" class="btn btn-danger w-full" style="display: none;">⏹️ Ukončit</button>
+    </div>
+</div>
+
+<!-- 6. TEMPLATE MODAL - Přidat před </body> -->
+<div id="templateModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title" id="templateModalTitle">Vytvořit Šablonu</h3>
+            <button class="modal-close" onclick="closeModal('templateModal')">&times;</button>
+        </div>
+        <form id="templateForm" onsubmit="saveTemplate(event)">
+            <input type="hidden" id="templateId">
+            
+            <div class="form-group">
+                <label class="form-label">Název Šablony</label>
+                <input type="text" id="templateName" class="form-control" required 
+                       placeholder="Např: Velký Projekt - 200 stolů">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Odhadovaný Počet Stolů</label>
+                <input type="number" id="templateEstimatedTables" class="form-control" 
+                       min="1" required placeholder="100">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Výchozí Odměna/Stůl (€)</label>
+                <input type="number" id="templateRewardPerWorker" class="form-control" 
+                       step="0.01" min="0" required placeholder="5.00">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Výchozí Pracovníci</label>
+                <div id="templateWorkerChecklist" class="worker-checklist"></div>
+            </div>
+            
+            <div class="flex gap-8">
+                <button type="button" onclick="closeModal('templateModal')" 
+                        class="btn btn-secondary w-full">Zrušit</button>
+                <button type="submit" class="btn btn-primary w-full">Uložit</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 7. UPDATED BOTTOM NAVIGATION - Nahradit existující .bottom-nav -->
+<nav class="bottom-nav">
+    <div class="nav-item" onclick="navigateTo('dashboard')" data-page="dashboard">
+        <div class="nav-icon">📁</div>
+        <div class="nav-label">Dashboard</div>
+    </div>
+    <div class="nav-item active" onclick="navigateTo('plan')" data-page="plan">
+        <div class="nav-icon">📋</div>
+        <div class="nav-label">Plán</div>
+    </div>
+    <div class="nav-item" onclick="navigateTo('records')" data-page="records">
+        <div class="nav-icon">📝</div>
+        <div class="nav-label">Záznamy</div>
+    </div>
+    <div class="nav-item" onclick="navigateTo('statistics')" data-page="statistics">
+        <div class="nav-icon">📈</div>
+        <div class="nav-label">Statistiky</div>
+    </div>
+    <div class="nav-item" onclick="navigateTo('settings')" data-page="settings">
+        <div class="nav-icon">⚙️</div>
+        <div class="nav-label">Nastavení</div>
+    </div>
+</nav>
+
+<!-- ================================================ -->
+<!-- KONEC HTML DODATŮ v4.0                         -->
+<!-- ================================================ -->
